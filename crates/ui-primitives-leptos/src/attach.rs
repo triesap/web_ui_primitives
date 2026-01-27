@@ -94,6 +94,7 @@ where
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn use_primitive<E>(
     attrs: impl Into<Signal<Vec<PrimitiveAttribute>>>,
     events: Vec<PrimitiveEvent>,
@@ -102,19 +103,24 @@ where
     E: html::ElementType,
     E::Output: 'static,
 {
+    let _ = attrs.into();
+    let _ = events;
+    let node_ref = NodeRef::<E>::new();
+    PrimitiveElement { node_ref }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn use_primitive<E>(
+    attrs: impl Into<Signal<Vec<PrimitiveAttribute>>>,
+    events: Vec<PrimitiveEvent>,
+) -> PrimitiveElement<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
     let attrs = attrs.into();
     let node_ref = NodeRef::<E>::new();
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        attach_primitive(node_ref, attrs.clone(), events.clone());
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let _ = attrs;
-        let _ = events;
-    }
-
+    attach_primitive(node_ref, attrs, events);
     PrimitiveElement { node_ref }
 }
 
@@ -127,6 +133,7 @@ fn attach_primitive<E>(
     E: html::ElementType,
     E::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
+    use send_wrapper::SendWrapper;
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
 
@@ -161,8 +168,11 @@ fn attach_primitive<E>(
         }
 
         if !handles.is_empty() {
-            let element = element.clone();
+            let cleanup_element = SendWrapper::new(element);
+            let cleanup_handles = SendWrapper::new(handles);
             on_cleanup(move || {
+                let element = cleanup_element.take();
+                let handles = cleanup_handles.take();
                 for handle in handles {
                     let _ = element.remove_event_listener_with_callback(
                         handle.name,
