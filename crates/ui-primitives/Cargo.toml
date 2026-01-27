@@ -1,0 +1,25 @@
+[package]
+name = "ui-primitives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+description = "Headless UI primitives for Rust, with optional framework adapters"
+keywords = ["ui", "headless", "a11y", "aria", "accessibility"]
+categories = ["gui", "accessibility"]
+
+[features]
+default = ["core"]
+core = ["ui-primitives-core"]
+leptos = ["ui-primitives-leptos"]
+
+[dependencies]
+ui-primitives-core = { path = "../ui-primitives-core", version = "0.1.0", optional = true }
+ui-primitives-leptos = { path = "../ui-primitives-leptos", version = "0.1.0", optional = true }
+
+[lints]
+workspace = true
