@@ -1,0 +1,24 @@
+[package]
+name = "ui-primitives-leptos"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+
+description = "Leptos bindings for ui-primitives"
+keywords = ["leptos", "ui", "headless", "a11y", "aria"]
+categories = ["gui", "web-programming", "accessibility"]
+
+[dependencies]
+ui-primitives-core = { path = "../ui-primitives-core", version = "0.1.0" }
+leptos = { workspace = true, features = ["csr"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true }
+
+[lints]
+workspace = true
