@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod attach;
+pub mod builders;
 
 pub use attach::{
     apply_attribute_delta,
