@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod attach;
+mod dismissable;
 mod modal;
 pub mod builders;
 
@@ -13,6 +14,12 @@ pub use attach::{
     PrimitiveEvent,
     PrimitiveResult,
     use_primitive,
+};
+pub use dismissable::{
+    dismissable_is_escape,
+    dismissable_is_outside,
+    DismissableLayer,
+    DismissableReason,
 };
 pub use modal::{
     modal_hide_siblings,
