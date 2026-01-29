@@ -2,6 +2,7 @@
 
 mod attach;
 mod dismissable;
+mod focus;
 mod modal;
 pub mod builders;
 
@@ -20,6 +21,11 @@ pub use dismissable::{
     dismissable_is_outside,
     DismissableLayer,
     DismissableReason,
+};
+pub use focus::{
+    focus_scope_next_index,
+    focus_scope_selector,
+    FocusScope,
 };
 pub use modal::{
     modal_hide_siblings,
