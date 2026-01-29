@@ -5,6 +5,71 @@ pub struct RovingFocus {
     looped: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RovingFocusOrientation {
+    Horizontal,
+    Vertical,
+    Both,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RovingFocusAction {
+    Next,
+    Prev,
+    First,
+    Last,
+}
+
+pub fn roving_focus_action_from_key(
+    key: &str,
+    orientation: RovingFocusOrientation,
+) -> Option<RovingFocusAction> {
+    match key {
+        "Home" => Some(RovingFocusAction::First),
+        "End" => Some(RovingFocusAction::Last),
+        "ArrowLeft" => matches!(
+            orientation,
+            RovingFocusOrientation::Horizontal | RovingFocusOrientation::Both
+        )
+        .then_some(RovingFocusAction::Prev),
+        "ArrowRight" => matches!(
+            orientation,
+            RovingFocusOrientation::Horizontal | RovingFocusOrientation::Both
+        )
+        .then_some(RovingFocusAction::Next),
+        "ArrowUp" => matches!(
+            orientation,
+            RovingFocusOrientation::Vertical | RovingFocusOrientation::Both
+        )
+        .then_some(RovingFocusAction::Prev),
+        "ArrowDown" => matches!(
+            orientation,
+            RovingFocusOrientation::Vertical | RovingFocusOrientation::Both
+        )
+        .then_some(RovingFocusAction::Next),
+        _ => None,
+    }
+}
+
+pub fn roving_focus_next_index(
+    current: usize,
+    count: usize,
+    action: RovingFocusAction,
+    looped: bool,
+) -> usize {
+    if count == 0 {
+        return 0;
+    }
+
+    let mut focus = RovingFocus::with_active(count, Some(current), looped);
+    match action {
+        RovingFocusAction::First => focus.move_first().unwrap_or(0),
+        RovingFocusAction::Last => focus.move_last().unwrap_or(0),
+        RovingFocusAction::Next => focus.move_next().unwrap_or(current),
+        RovingFocusAction::Prev => focus.move_prev().unwrap_or(current),
+    }
+}
+
 impl RovingFocus {
     pub fn new(len: usize) -> Self {
         Self::with_active(len, if len > 0 { Some(0) } else { None }, true)
@@ -125,7 +190,13 @@ impl RovingFocus {
 
 #[cfg(test)]
 mod tests {
-    use super::RovingFocus;
+    use super::{
+        roving_focus_action_from_key,
+        roving_focus_next_index,
+        RovingFocus,
+        RovingFocusAction,
+        RovingFocusOrientation,
+    };
 
     #[test]
     fn roving_focus_wraps_when_looped() {
@@ -146,5 +217,61 @@ mod tests {
         let mut focus = RovingFocus::new(0);
         assert_eq!(focus.move_next(), None);
         assert_eq!(focus.active(), None);
+    }
+
+    #[test]
+    fn roving_focus_action_maps_arrows() {
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowLeft",
+                RovingFocusOrientation::Horizontal
+            ),
+            Some(RovingFocusAction::Prev)
+        );
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowUp",
+                RovingFocusOrientation::Horizontal
+            ),
+            None
+        );
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowDown",
+                RovingFocusOrientation::Both
+            ),
+            Some(RovingFocusAction::Next)
+        );
+    }
+
+    #[test]
+    fn roving_focus_next_index_respects_loop() {
+        assert_eq!(
+            roving_focus_next_index(
+                0,
+                3,
+                RovingFocusAction::Prev,
+                false
+            ),
+            0
+        );
+        assert_eq!(
+            roving_focus_next_index(
+                0,
+                3,
+                RovingFocusAction::Prev,
+                true
+            ),
+            2
+        );
+        assert_eq!(
+            roving_focus_next_index(
+                2,
+                3,
+                RovingFocusAction::Next,
+                true
+            ),
+            0
+        );
     }
 }
