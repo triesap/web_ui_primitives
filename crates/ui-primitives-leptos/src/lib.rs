@@ -5,6 +5,7 @@ mod dismissable;
 mod focus;
 mod modal;
 mod presence;
+mod scroll_lock;
 pub mod builders;
 
 pub use attach::{
@@ -40,4 +41,11 @@ pub use presence::{
     presence_state_next,
     Presence,
     PresenceState,
+};
+pub use scroll_lock::{
+    scroll_lock_acquire,
+    scroll_lock_release,
+    ScrollLockError,
+    ScrollLockGuard,
+    ScrollLockResult,
 };
