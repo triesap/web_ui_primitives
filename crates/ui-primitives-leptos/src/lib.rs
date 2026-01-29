@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod attach;
+mod modal;
 pub mod builders;
 
 pub use attach::{
@@ -12,4 +13,12 @@ pub use attach::{
     PrimitiveEvent,
     PrimitiveResult,
     use_primitive,
+};
+pub use modal::{
+    modal_hide_siblings,
+    modal_restore,
+    ModalError,
+    ModalGuard,
+    ModalResult,
+    ModalTarget,
 };
