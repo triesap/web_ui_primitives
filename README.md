@@ -8,23 +8,36 @@ Headless, accessible UI primitives for Rust web frameworks.
 - Offer thin framework bindings that attach behavior to any markup.
 - Stay unstyled by default so applications control their own design system.
 
+## Crates
+
+- `ui-primitives-core` (no_std): state machines and models (collapsible, dialog, tabs, roving focus, typeahead, ids).
+- `ui-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissable layer, presence, portal, modal aria-hidden, scroll lock).
+
 ## How it works
 
-Builders return **elements**, **states**, and **options**. Elements can be attached to any DOM node in user markup, while states/options are signals for reactive control.
+Core models expose state. Framework bindings expose helpers that generate DOM attributes/events, plus primitives for behavior like focus or dismissable layers.
+
+Example (Leptos):
 
 ```rust
-let collapsible = create_collapsible(CollapsibleProps::default());
-let root = collapsible.elements.root;
-let trigger = collapsible.elements.trigger;
-let content = collapsible.elements.content;
+use leptos::prelude::*;
+use ui_primitives::core::collapsible::CollapsibleModel;
+use ui_primitives::leptos::{use_primitive, builders::collapsible_trigger_attrs};
+
+let model = RwSignal::new(CollapsibleModel::new(false));
+let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), None));
 
 view! {
-    <div node_ref=use_primitive(root)>
-        <button node_ref=use_primitive(trigger)>"Toggle"</button>
-        <div node_ref=use_primitive(content)>"Content"</div>
-    </div>
+    <button node_ref=use_primitive(attrs, vec![])>
+        "Toggle"
+    </button>
 }
 ```
+
+## Features
+
+- `core` (default): core models and state machines
+- `leptos`: Leptos bindings (depends on `ui-primitives-core`)
 
 ## Contributing
 
