@@ -4,6 +4,7 @@ mod attach;
 mod dismissable;
 mod focus;
 mod modal;
+mod presence;
 pub mod builders;
 
 pub use attach::{
@@ -34,4 +35,9 @@ pub use modal::{
     ModalGuard,
     ModalResult,
     ModalTarget,
+};
+pub use presence::{
+    presence_state_next,
+    Presence,
+    PresenceState,
 };
