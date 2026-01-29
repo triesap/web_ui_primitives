@@ -4,6 +4,7 @@ mod attach;
 mod dismissable;
 mod focus;
 mod modal;
+mod portal;
 mod presence;
 mod scroll_lock;
 pub mod builders;
@@ -37,6 +38,7 @@ pub use modal::{
     ModalResult,
     ModalTarget,
 };
+pub use portal::{Portal, PortalMount};
 pub use presence::{
     presence_state_next,
     Presence,
