@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use leptos::portal::Portal;
+use leptos::portal::Portal as LeptosPortal;
 
 #[cfg(target_arch = "wasm32")]
 pub type PortalMount = web_sys::Element;
@@ -17,8 +17,8 @@ pub fn Portal(
     #[cfg(target_arch = "wasm32")]
     {
         match mount {
-            Some(mount) => view! { <Portal mount=mount>{children()}</Portal> },
-            None => view! { <Portal>{children()}</Portal> },
+            Some(mount) => view! { <LeptosPortal mount=mount>{children()}</LeptosPortal> },
+            None => view! { <LeptosPortal>{children()}</LeptosPortal> },
         }
     }
     #[cfg(not(target_arch = "wasm32"))]
