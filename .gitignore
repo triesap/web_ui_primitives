@@ -59,6 +59,7 @@ Thumbs.db
 *.tmp
 .local/
 notes*.txt
+justfile
 
 # Node tooling
 node_modules/
