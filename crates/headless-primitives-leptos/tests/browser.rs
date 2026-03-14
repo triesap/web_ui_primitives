@@ -77,6 +77,10 @@ fn active_id() -> Option<String> {
     document().active_element().map(|element| element.id())
 }
 
+fn active_element() -> Option<web_sys::Element> {
+    document().active_element()
+}
+
 #[wasm_bindgen_test]
 fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown() {
     let host = append_div("dismissible-host");
@@ -296,6 +300,103 @@ fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
     assert!(shift_tab.default_prevented());
     assert_eq!(active_id().as_deref(), Some("focus-shift-last"));
     assert_ne!(active_id().as_deref(), Some("focus-shift-before"));
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
+    let previous = document()
+        .create_element("button")
+        .expect("create previous button")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("previous html element");
+    previous.set_id("focus-lifecycle-previous");
+    body()
+        .append_child(&previous)
+        .expect("append previous button");
+    previous.focus().expect("focus previous");
+    assert_eq!(active_id().as_deref(), Some("focus-lifecycle-previous"));
+
+    let host = append_div("focus-lifecycle-host");
+    let callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let mount_callbacks = Arc::clone(&callbacks);
+    let unmount_callbacks = Arc::clone(&callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_mount_auto_focus = {
+            let callbacks = Arc::clone(&mount_callbacks);
+            Callback::new(move |_| {
+                callbacks
+                    .lock()
+                    .expect("mount callbacks lock")
+                    .push("mount");
+            })
+        };
+        let on_unmount_auto_focus = {
+            let callbacks = Arc::clone(&unmount_callbacks);
+            Callback::new(move |_| {
+                callbacks
+                    .lock()
+                    .expect("unmount callbacks lock")
+                    .push("unmount");
+            })
+        };
+
+        view! {
+            <FocusScope
+                auto_focus=true
+                return_focus=true
+                on_mount_auto_focus=on_mount_auto_focus
+                on_unmount_auto_focus=on_unmount_auto_focus
+            >
+                <button id="focus-lifecycle-first">"First"</button>
+            </FocusScope>
+        }
+    });
+
+    assert_eq!(active_id().as_deref(), Some("focus-lifecycle-first"));
+    assert_eq!(
+        callbacks.lock().expect("callbacks lock").as_slice(),
+        &["mount"]
+    );
+
+    drop(mount);
+
+    assert_eq!(active_id().as_deref(), Some("focus-lifecycle-previous"));
+    assert_eq!(
+        callbacks.lock().expect("callbacks lock").as_slice(),
+        &["mount", "unmount"]
+    );
+
+    remove_from_body(&host);
+    remove_from_body(&previous);
+}
+
+#[wasm_bindgen_test]
+fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable() {
+    let host = append_div("focus-wrapper-host");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <FocusScope auto_focus=true>
+                <span id="focus-wrapper-child">"Only child"</span>
+            </FocusScope>
+        }
+    });
+
+    let wrapper = host
+        .first_element_child()
+        .expect("focus scope wrapper")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("wrapper html element");
+    let wrapper_element: web_sys::Element = wrapper.clone().into();
+
+    assert_eq!(wrapper.tab_index(), -1);
+    assert!(active_element().is_some_and(|active| {
+        active.is_same_node(Some(&wrapper_element))
+    }));
 
     drop(mount);
     remove_from_body(&host);
