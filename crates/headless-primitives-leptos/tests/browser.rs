@@ -1790,6 +1790,263 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
 }
 
 #[wasm_bindgen_test]
+fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
+    let host = append_div("dismissible-full-teardown-doc-host");
+    let outside = append_button("dismissible-full-teardown-doc-outside");
+    let outer_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+    let outer_pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_pointer_targets_handle = Arc::clone(&outer_pointer_targets);
+    let inner_pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_pointer_targets_handle = Arc::clone(&inner_pointer_targets);
+    let outer_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_focus_targets_handle = Arc::clone(&outer_focus_targets);
+    let inner_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_focus_targets_handle = Arc::clone(&inner_focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_pointer_targets = Arc::clone(&outer_pointer_targets_handle);
+        let inner_pointer_targets = Arc::clone(&inner_pointer_targets_handle);
+        let outer_focus_targets = Arc::clone(&outer_focus_targets_handle);
+        let inner_focus_targets = Arc::clone(&inner_focus_targets_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+        });
+        let outer_on_pointer_down_outside =
+            Callback::new(move |event: leptos::ev::PointerEvent| {
+                let target_id = event
+                    .target()
+                    .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                    .map(|element| element.id())
+                    .unwrap_or_default();
+                outer_pointer_targets
+                    .lock()
+                    .expect("outer pointer targets lock")
+                    .push(target_id);
+            });
+        let inner_on_pointer_down_outside =
+            Callback::new(move |event: leptos::ev::PointerEvent| {
+                let target_id = event
+                    .target()
+                    .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                    .map(|element| element.id())
+                    .unwrap_or_default();
+                inner_pointer_targets
+                    .lock()
+                    .expect("inner pointer targets lock")
+                    .push(target_id);
+            });
+        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            outer_focus_targets
+                .lock()
+                .expect("outer focus targets lock")
+                .push(target_id);
+        });
+        let inner_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            inner_focus_targets
+                .lock()
+                .expect("inner focus targets lock")
+                .push(target_id);
+        });
+
+        view! {
+            {move || {
+                outer_present.get().then(|| {
+                    let outer_on_dismiss = outer_on_dismiss.clone();
+                    let inner_on_dismiss = inner_on_dismiss.clone();
+                    let outer_on_pointer_down_outside = outer_on_pointer_down_outside.clone();
+                    let inner_on_pointer_down_outside = inner_on_pointer_down_outside.clone();
+                    let outer_on_focus_outside = outer_on_focus_outside.clone();
+                    let inner_on_focus_outside = inner_on_focus_outside.clone();
+                    view! {
+                        <DismissibleLayer
+                            on_dismiss=outer_on_dismiss
+                            on_pointer_down_outside=outer_on_pointer_down_outside
+                            on_focus_outside=outer_on_focus_outside
+                        >
+                            <DismissibleLayer
+                                on_dismiss=inner_on_dismiss
+                                on_pointer_down_outside=inner_on_pointer_down_outside
+                                on_focus_outside=inner_on_focus_outside
+                            >
+                                <button id="dismissible-full-teardown-doc-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        </DismissibleLayer>
+                    }
+                })
+            }}
+        }
+    });
+
+    outer_present.set(false);
+
+    assert!(host.first_element_child().is_none());
+    assert!(
+        document()
+            .get_element_by_id("dismissible-full-teardown-doc-inner")
+            .is_none()
+    );
+
+    dispatch_pointer_down(&outside);
+    outside.focus().expect("focus outside after teardown");
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(inner_dismissals.lock().expect("inner dismissals lock").is_empty());
+    assert!(
+        outer_pointer_targets
+            .lock()
+            .expect("outer pointer targets lock")
+            .is_empty()
+    );
+    assert!(
+        inner_pointer_targets
+            .lock()
+            .expect("inner pointer targets lock")
+            .is_empty()
+    );
+    assert!(
+        outer_focus_targets
+            .lock()
+            .expect("outer focus targets lock")
+            .is_empty()
+    );
+    assert!(
+        inner_focus_targets
+            .lock()
+            .expect("inner focus targets lock")
+            .is_empty()
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
+    let host = append_div("dismissible-full-teardown-escape-host");
+    let outside = append_button("dismissible-full-teardown-escape-outside");
+    let outer_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+    let outer_escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_escape_keys_handle = Arc::clone(&outer_escape_keys);
+    let inner_escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_escape_keys_handle = Arc::clone(&inner_escape_keys);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_escape_keys = Arc::clone(&outer_escape_keys_handle);
+        let inner_escape_keys = Arc::clone(&inner_escape_keys_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+        });
+        let outer_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
+            outer_escape_keys
+                .lock()
+                .expect("outer escape keys lock")
+                .push(event.key());
+        });
+        let inner_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
+            inner_escape_keys
+                .lock()
+                .expect("inner escape keys lock")
+                .push(event.key());
+        });
+
+        view! {
+            {move || {
+                outer_present.get().then(|| {
+                    let outer_on_dismiss = outer_on_dismiss.clone();
+                    let inner_on_dismiss = inner_on_dismiss.clone();
+                    let outer_on_escape_key_down = outer_on_escape_key_down.clone();
+                    let inner_on_escape_key_down = inner_on_escape_key_down.clone();
+                    view! {
+                        <DismissibleLayer
+                            on_dismiss=outer_on_dismiss
+                            on_escape_key_down=outer_on_escape_key_down
+                        >
+                            <DismissibleLayer
+                                on_dismiss=inner_on_dismiss
+                                on_escape_key_down=inner_on_escape_key_down
+                            >
+                                <button id="dismissible-full-teardown-escape-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        </DismissibleLayer>
+                    }
+                })
+            }}
+        }
+    });
+
+    outer_present.set(false);
+
+    assert!(host.first_element_child().is_none());
+    assert!(
+        document()
+            .get_element_by_id("dismissible-full-teardown-escape-inner")
+            .is_none()
+    );
+
+    dispatch_escape_keydown(&outside);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(inner_dismissals.lock().expect("inner dismissals lock").is_empty());
+    assert!(
+        outer_escape_keys
+            .lock()
+            .expect("outer escape keys lock")
+            .is_empty()
+    );
+    assert!(
+        inner_escape_keys
+            .lock()
+            .expect("inner escape keys lock")
+            .is_empty()
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
