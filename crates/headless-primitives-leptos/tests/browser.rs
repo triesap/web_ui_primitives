@@ -2,6 +2,7 @@
 
 use headless_primitives_leptos::{
     DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
+    scroll_lock_acquire, scroll_lock_release,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -108,6 +109,20 @@ fn html_element_by_id(id: &str) -> web_sys::HtmlElement {
         .unwrap_or_else(|| panic!("missing element: {id}"))
         .dyn_into::<web_sys::HtmlElement>()
         .expect("html element")
+}
+
+fn body_style(name: &str) -> String {
+    body()
+        .style()
+        .get_property_value(name)
+        .unwrap_or_else(|_| panic!("missing body style: {name}"))
+}
+
+fn set_body_style(name: &str, value: &str) {
+    body()
+        .style()
+        .set_property(name, value)
+        .unwrap_or_else(|_| panic!("set body style: {name}"));
 }
 
 #[wasm_bindgen_test]
@@ -553,4 +568,76 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
 
     drop(mount);
     remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn scroll_lock_release_restores_previous_body_styles() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+
+    set_body_style("overflow", "scroll");
+    set_body_style("position", "relative");
+    set_body_style("top", "12px");
+    set_body_style("width", "75%");
+
+    let guard = scroll_lock_acquire().expect("acquire scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_ne!(body_style("top"), "12px");
+
+    scroll_lock_release().expect("release scroll lock");
+
+    assert_eq!(body_style("overflow"), "scroll");
+    assert_eq!(body_style("position"), "relative");
+    assert_eq!(body_style("top"), "12px");
+    assert_eq!(body_style("width"), "75%");
+
+    drop(guard);
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
+}
+
+#[wasm_bindgen_test]
+fn nested_scroll_lock_guards_preserve_body_lock_until_the_last_drop() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+
+    set_body_style("overflow", "auto");
+    set_body_style("position", "absolute");
+    set_body_style("top", "8px");
+    set_body_style("width", "60%");
+
+    let outer_guard = scroll_lock_acquire().expect("acquire outer scroll lock");
+    let inner_guard = scroll_lock_acquire().expect("acquire inner scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+
+    drop(inner_guard);
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+
+    drop(outer_guard);
+
+    assert_eq!(body_style("overflow"), "auto");
+    assert_eq!(body_style("position"), "absolute");
+    assert_eq!(body_style("top"), "8px");
+    assert_eq!(body_style("width"), "60%");
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
 }
