@@ -1,7 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/*"
+    "crates/headless-primitives",
+    "crates/headless-primitives-core",
+    "crates/headless-primitives-leptos",
 ]
 
 [workspace.package]

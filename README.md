@@ -12,7 +12,6 @@ Headless, accessible UI primitives for Rust web frameworks.
 
 - `headless-primitives-core` (no_std): primary interaction models (`collapsible`, `dialog`, `tabs`) plus low-level utilities (`roving_focus`, `typeahead`, `ids`, `controlled`, `state_machine`).
 - `headless-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissible layer, presence, portal, modal aria-hidden, scroll lock).
-- `ui-primitives*`: compatibility shims that re-export the renamed crates during the transition.
 
 ## How it works
 
@@ -60,13 +59,6 @@ view! {
 
 - `core` (default): core models and state machines
 - `leptos`: Leptos bindings (depends on `headless-primitives-core`)
-
-## Migration
-
-- `Primitive*` names remain as deprecated aliases for the new `Dom*` and `BoundElement` surface.
-- `use_primitive` remains as a deprecated alias for `use_dom_bindings`.
-- `Dismissable*` names remain as deprecated aliases for `Dismissible*`.
-- `DismissibleLayer` now uses `disable_pointer_down_outside_dismiss` as the canonical prop name; `disable_outside_pointer_events` remains as a compatibility alias for the same behavior.
 
 ## Contributing
 

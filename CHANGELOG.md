@@ -8,4 +8,3 @@ Semantic Versioning.
 ## [Unreleased]
 
 - rename the crate family to headless-primitives.
-- add ui-primitives compatibility shims for the crate rename.
