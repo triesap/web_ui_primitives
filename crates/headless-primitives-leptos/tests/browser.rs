@@ -385,6 +385,114 @@ fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
 }
 
 #[wasm_bindgen_test]
+fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
+    let host = append_div("dismissible-pointer-disabled-host");
+    let outside = append_div("dismissible-pointer-disabled-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_targets_handle = Arc::clone(&pointer_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_targets = Arc::clone(&pointer_targets_handle);
+
+        view! {
+            <DismissibleLayer
+                disable_pointer_down_outside_dismiss=true
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    pointer_targets
+                        .lock()
+                        .expect("pointer targets lock")
+                        .push(target_id);
+                })
+            >
+                <button id="dismissible-pointer-disabled-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    dispatch_pointer_down(&outside);
+
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+    assert!(
+        pointer_targets
+            .lock()
+            .expect("pointer targets lock")
+            .is_empty()
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_is_disabled() {
+    let host = append_div("dismissible-pointer-disabled-combined-host");
+    let outside = append_button("dismissible-pointer-disabled-focus-target");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+
+        view! {
+            <DismissibleLayer
+                disable_pointer_down_outside_dismiss=true
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    focus_targets
+                        .lock()
+                        .expect("focus targets lock")
+                        .push(target_id);
+                })
+            >
+                <button id="dismissible-pointer-disabled-combined-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-pointer-disabled-combined-inside");
+
+    inside.focus().expect("focus inside");
+    dispatch_escape_keydown(&inside);
+    dispatch_pointer_down(&outside);
+    outside.focus().expect("focus outside");
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape, DismissibleReason::FocusOutside]
+    );
+    assert_eq!(
+        focus_targets.lock().expect("focus targets lock").as_slice(),
+        &["dismissible-pointer-disabled-focus-target".to_string()]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
