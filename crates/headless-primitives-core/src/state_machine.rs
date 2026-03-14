@@ -1,7 +1,8 @@
 //! Generic finite state machine helpers.
 //!
 //! This module is lower-level than the widget models in this crate and is
-//! retained for advanced composition and backward compatibility.
+//! intended for custom interaction orchestration when the built-in models are
+//! not the right fit.
 
 use alloc::vec::Vec;
 

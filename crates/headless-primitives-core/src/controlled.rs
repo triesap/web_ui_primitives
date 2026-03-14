@@ -1,7 +1,8 @@
 //! Generic controlled-value helpers for advanced state coordination.
 //!
 //! These types are intentionally lower-level than the widget models exposed by
-//! this crate. They remain public for composition and backward compatibility.
+//! this crate. They exist as extension points for custom state coordination,
+//! adapters, and higher-level abstractions built on top of the core models.
 
 use alloc::boxed::Box;
 use core::mem;
