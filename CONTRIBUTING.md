@@ -15,6 +15,24 @@ This repository is a Rust workspace. Typical tasks:
 
 - `cargo fmt`
 - `cargo test`
+- `wasm-pack test --headless --chrome crates/headless-primitives-leptos`
+
+## Browser tests
+
+Browser-targeted Leptos tests live in
+`crates/headless-primitives-leptos/tests/browser.rs`.
+
+Use the `wasm-pack test --headless --chrome crates/headless-primitives-leptos`
+command when you change dismissible, portal, focus, modal, presence, or other
+browser-only behavior.
+
+`cargo test` is still the main host-side check, but it does not execute the
+wasm browser harness.
+
+If ChromeDriver cannot find the browser you want to use, start from
+`webdriver.json.example` and point `WASM_BINDGEN_TEST_WEBDRIVER_JSON` at a
+local override file. Set `goog:chromeOptions.binary` when your Chrome or
+Chromium binary is not discoverable through the default webdriver setup.
 
 ## Pull request checklist
 

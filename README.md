@@ -60,6 +60,28 @@ view! {
 - `core` (default): core interaction models and low-level interaction utilities
 - `leptos`: Leptos bindings (depends on `headless-primitives-core`)
 
+## Browser testing
+
+Browser-only Leptos behavior is covered in
+`crates/headless-primitives-leptos/tests/browser.rs`.
+
+`cargo test` compiles that test target on host builds, but it only executes in
+a browser runtime. Run the browser harness with:
+
+```bash
+wasm-pack test --headless --chrome crates/headless-primitives-leptos
+```
+
+If ChromeDriver needs explicit browser capabilities, use
+`webdriver.json.example` as the template for a local `webdriver.json` in the
+workspace root, or point `WASM_BINDGEN_TEST_WEBDRIVER_JSON` at a custom file.
+Set `goog:chromeOptions.binary` when Chrome or Chromium is installed outside
+the default discovery path.
+
+If your OS rejects a local browser build or ChromeDriver fails during browser
+startup or teardown, verify that the browser binary and driver are compatible
+and point ChromeDriver at a known-good Chrome or Chromium install.
+
 ## Contributing
 
 See `CONTRIBUTING.md`.

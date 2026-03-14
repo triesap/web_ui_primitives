@@ -1,0 +1,6 @@
+{
+  "goog:chromeOptions": {
+    "binary": "/absolute/path/to/chrome-or-chromium",
+    "args": []
+  }
+}
