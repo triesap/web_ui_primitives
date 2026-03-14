@@ -2267,6 +2267,96 @@ fn portal_mounts_children_into_the_explicit_target() {
 }
 
 #[wasm_bindgen_test]
+fn portal_without_explicit_mount_appends_to_body_and_cleans_up_on_drop() {
+    let host = append_div("portal-default-host");
+    let body_children_before_mount = body().child_element_count();
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <Portal>
+                <span>"Default Portaled"</span>
+            </Portal>
+        }
+    });
+
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(body().child_element_count(), body_children_before_mount + 1);
+
+    let portal_container = body()
+        .last_element_child()
+        .expect("default portal container");
+    assert_eq!(portal_container.id(), "");
+    assert_eq!(
+        portal_container.text_content().as_deref(),
+        Some("Default Portaled")
+    );
+
+    drop(mount);
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn portal_without_explicit_mount_repeated_remounts_leave_no_stranded_body_nodes() {
+    let host = append_div("portal-default-remount-host");
+    let present = RwSignal::new(true);
+    let label = RwSignal::new("First");
+    let body_children_before_mount = body().child_element_count();
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            {move || {
+                present.get().then(|| {
+                    let text = label.get();
+
+                    view! {
+                        <Portal>
+                            <span>{text}</span>
+                        </Portal>
+                    }
+                })
+            }}
+        }
+    });
+
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(body().child_element_count(), body_children_before_mount + 1);
+    assert_eq!(
+        body()
+            .last_element_child()
+            .expect("first default portal container")
+            .text_content()
+            .as_deref(),
+        Some("First")
+    );
+
+    present.set(false);
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+
+    label.set("Second");
+    present.set(true);
+    assert_eq!(body().child_element_count(), body_children_before_mount + 1);
+    assert_eq!(
+        body()
+            .last_element_child()
+            .expect("second default portal container")
+            .text_content()
+            .as_deref(),
+        Some("Second")
+    );
+
+    present.set(false);
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+
+    drop(mount);
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones() {
     let host = append_div("portal-remount-host");
     let first_target = append_div("portal-remount-first-target");
