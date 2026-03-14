@@ -1,5 +1,5 @@
 [package]
-name = "ui-primitives-core"
+name = "headless-primitives-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,12 +8,11 @@ authors.workspace = true
 repository.workspace = true
 readme.workspace = true
 
-description = "Compatibility shim for the renamed headless-primitives-core crate"
+description = "Headless primitives and accessibility helpers for Rust UI frameworks"
 keywords = ["ui", "headless", "a11y", "aria", "state-machine"]
 categories = ["gui", "accessibility"]
 
 [dependencies]
-headless-primitives-core = { path = "../headless-primitives-core", version = "0.1.0" }
 
 [lints]
 workspace = true

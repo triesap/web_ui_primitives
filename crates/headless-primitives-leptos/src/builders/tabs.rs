@@ -1,6 +1,6 @@
 use crate::PrimitiveAttribute;
-use ui_primitives_core::orientation::Orientation;
-use ui_primitives_core::tabs::TabsModel;
+use headless_primitives_core::orientation::Orientation;
+use headless_primitives_core::tabs::TabsModel;
 
 pub fn tabs_list_attrs(orientation: Orientation) -> Vec<PrimitiveAttribute> {
     let mut attrs = Vec::new();
@@ -74,8 +74,8 @@ pub fn tabs_panel_attrs(
 mod tests {
     use super::{tabs_list_attrs, tabs_panel_attrs, tabs_trigger_attrs};
     use crate::PrimitiveAttributeValue;
-    use ui_primitives_core::orientation::Orientation;
-    use ui_primitives_core::tabs::TabsModel;
+    use headless_primitives_core::orientation::Orientation;
+    use headless_primitives_core::tabs::TabsModel;
 
     #[test]
     fn list_attrs_include_orientation_for_vertical() {

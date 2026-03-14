@@ -1,4 +1,4 @@
-# ui-primitives
+# headless-primitives
 
 Headless, accessible UI primitives for Rust web frameworks.
 
@@ -10,8 +10,9 @@ Headless, accessible UI primitives for Rust web frameworks.
 
 ## Crates
 
-- `ui-primitives-core` (no_std): state machines and models (collapsible, dialog, tabs, roving focus, typeahead, ids).
-- `ui-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissable layer, presence, portal, modal aria-hidden, scroll lock).
+- `headless-primitives-core` (no_std): state machines and models (collapsible, dialog, tabs, roving focus, typeahead, ids).
+- `headless-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissable layer, presence, portal, modal aria-hidden, scroll lock).
+- `ui-primitives*`: compatibility shims that re-export the renamed crates during the transition.
 
 ## How it works
 
@@ -21,8 +22,8 @@ Example (Leptos):
 
 ```rust
 use leptos::prelude::*;
-use ui_primitives::core::collapsible::CollapsibleModel;
-use ui_primitives::leptos::{use_primitive, builders::collapsible_trigger_attrs};
+use headless_primitives::core::collapsible::CollapsibleModel;
+use headless_primitives::leptos::{builders::collapsible_trigger_attrs, use_primitive};
 
 let model = RwSignal::new(CollapsibleModel::new(false));
 let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), None));
@@ -37,7 +38,7 @@ view! {
 ## Features
 
 - `core` (default): core models and state machines
-- `leptos`: Leptos bindings (depends on `ui-primitives-core`)
+- `leptos`: Leptos bindings (depends on `headless-primitives-core`)
 
 ## Contributing
 

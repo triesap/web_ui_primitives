@@ -10,7 +10,7 @@ edition = "2024"
 license = "Unlicense"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 readme = "README.md"
-repository = "https://github.com/triesap/ui-primitives"
+repository = "https://github.com/triesap/headless-primitives"
 rust-version = "1.92.0"
 
 [workspace.lints.rust]

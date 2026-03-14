@@ -1,5 +1,5 @@
 use crate::PrimitiveAttribute;
-use ui_primitives_core::dialog::{DialogModel, DialogState};
+use headless_primitives_core::dialog::{DialogModel, DialogState};
 
 pub fn dialog_trigger_attrs(model: &DialogModel, controls_id: Option<&str>) -> Vec<PrimitiveAttribute> {
     let mut attrs = Vec::new();
@@ -49,7 +49,7 @@ fn dialog_state_value(state: DialogState) -> &'static str {
 mod tests {
     use super::{dialog_content_attrs, dialog_trigger_attrs};
     use crate::PrimitiveAttributeValue;
-    use ui_primitives_core::dialog::DialogModel;
+    use headless_primitives_core::dialog::DialogModel;
 
     #[test]
     fn trigger_attrs_reflect_open() {

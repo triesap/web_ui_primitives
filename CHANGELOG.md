@@ -7,4 +7,5 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-- Initial repository bootstrap.
+- rename the crate family to headless-primitives.
+- add ui-primitives compatibility shims for the crate rename.

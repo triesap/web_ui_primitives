@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to ui-primitives.
+Thanks for your interest in contributing to headless-primitives.
 
 ## Ways to help
 
