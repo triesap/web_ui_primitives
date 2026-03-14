@@ -1333,6 +1333,260 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
 }
 
 #[wasm_bindgen_test]
+fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focus() {
+    let host = append_div("dismissible-nonlifo-doc-host");
+    let outside = append_button("dismissible-nonlifo-doc-outside");
+    let middle_present = RwSignal::new(true);
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+    let outer_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_focus_targets_handle = Arc::clone(&outer_focus_targets);
+    let inner_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_focus_targets_handle = Arc::clone(&inner_focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_focus_targets = Arc::clone(&outer_focus_targets_handle);
+        let inner_focus_targets = Arc::clone(&inner_focus_targets_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+        });
+        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            outer_focus_targets
+                .lock()
+                .expect("outer focus targets lock")
+                .push(target_id);
+        });
+        let inner_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            inner_focus_targets
+                .lock()
+                .expect("inner focus targets lock")
+                .push(target_id);
+        });
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=outer_on_dismiss
+                on_focus_outside=outer_on_focus_outside
+            >
+                <button id="dismissible-nonlifo-doc-outer">"Outer"</button>
+                {move || {
+                    middle_present.get().then(|| {
+                        view! {
+                            <DismissibleLayer>
+                                <button id="dismissible-nonlifo-doc-middle">"Middle"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_focus_outside = inner_on_focus_outside.clone();
+                        view! {
+                            <DismissibleLayer
+                                on_dismiss=on_dismiss
+                                on_focus_outside=on_focus_outside
+                            >
+                                <button id="dismissible-nonlifo-doc-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    middle_present.set(false);
+    assert!(
+        document()
+            .get_element_by_id("dismissible-nonlifo-doc-middle")
+            .is_none()
+    );
+
+    let inner = html_element_by_id("dismissible-nonlifo-doc-inner");
+    let outer = html_element_by_id("dismissible-nonlifo-doc-outer");
+
+    inner.focus().expect("focus inner");
+    outer.focus().expect("focus outer");
+    dispatch_pointer_down(&outside);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_focus_targets
+            .lock()
+            .expect("outer focus targets lock")
+            .is_empty()
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[
+            DismissibleReason::FocusOutside,
+            DismissibleReason::PointerDownOutside
+        ]
+    );
+    assert_eq!(
+        inner_focus_targets
+            .lock()
+            .expect("inner focus targets lock")
+            .as_slice(),
+        &["dismissible-nonlifo-doc-outer".to_string()]
+    );
+
+    inner_present.set(false);
+    assert!(
+        document()
+            .get_element_by_id("dismissible-nonlifo-doc-inner")
+            .is_none()
+    );
+
+    dispatch_pointer_down(&outside);
+    outer.focus().expect("refocus outer");
+    outside.focus().expect("focus outside");
+
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        outer_focus_targets
+            .lock()
+            .expect("outer focus targets lock")
+            .as_slice(),
+        &["dismissible-nonlifo-doc-outside".to_string()]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[
+            DismissibleReason::FocusOutside,
+            DismissibleReason::PointerDownOutside
+        ]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
+    let host = append_div("dismissible-nonlifo-escape-host");
+    let middle_present = RwSignal::new(true);
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+        });
+
+        view! {
+            <DismissibleLayer on_dismiss=outer_on_dismiss>
+                <button id="dismissible-nonlifo-escape-outer">"Outer"</button>
+                {move || {
+                    middle_present.get().then(|| {
+                        view! {
+                            <DismissibleLayer>
+                                <button id="dismissible-nonlifo-escape-middle">"Middle"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer on_dismiss=on_dismiss>
+                                <button id="dismissible-nonlifo-escape-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    middle_present.set(false);
+    assert!(
+        document()
+            .get_element_by_id("dismissible-nonlifo-escape-middle")
+            .is_none()
+    );
+
+    let inner = html_element_by_id("dismissible-nonlifo-escape-inner");
+    dispatch_escape_keydown(&inner);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+
+    inner_present.set(false);
+    assert!(
+        document()
+            .get_element_by_id("dismissible-nonlifo-escape-inner")
+            .is_none()
+    );
+
+    let outer = html_element_by_id("dismissible-nonlifo-escape-outer");
+    outer.focus().expect("focus outer");
+    dispatch_escape_keydown(&outer);
+
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
