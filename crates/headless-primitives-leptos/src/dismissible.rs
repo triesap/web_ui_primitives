@@ -24,17 +24,25 @@ pub fn dismissible_is_outside(is_inside: bool) -> bool {
 /// Headless layer that reports escape, outside pointer, and outside focus
 /// dismissal requests.
 ///
-/// `disable_outside_pointer_events` only suppresses pointer-down-outside
-/// dismissal handling. It does not mutate CSS `pointer-events`.
+/// `disable_pointer_down_outside_dismiss` suppresses pointer-down-outside
+/// dismissal handling.
+///
+/// `disable_outside_pointer_events` remains available as a compatibility alias
+/// for the same behavior. Neither prop mutates CSS `pointer-events`.
 pub fn DismissibleLayer(
     #[prop(optional)] on_dismiss: Option<Callback<DismissibleReason>>,
     #[prop(optional)] on_escape_key_down: Option<Callback<KeyboardEvent>>,
     #[prop(optional)] on_pointer_down_outside: Option<Callback<PointerEvent>>,
     #[prop(optional)] on_focus_outside: Option<Callback<FocusEvent>>,
+    #[prop(optional)] disable_pointer_down_outside_dismiss: bool,
     #[prop(optional)] disable_outside_pointer_events: bool,
     children: ChildrenFn,
 ) -> impl IntoView {
     let node_ref = NodeRef::<html::Div>::new();
+    let disable_pointer_down_outside_dismiss = pointer_down_outside_dismiss_disabled(
+        disable_pointer_down_outside_dismiss,
+        disable_outside_pointer_events,
+    );
 
     let on_keydown = move |event: KeyboardEvent| {
         if !dismissible_is_escape(&event.key()) {
@@ -65,7 +73,7 @@ pub fn DismissibleLayer(
                 None => return,
             };
 
-            if !disable_outside_pointer_events {
+            if !disable_pointer_down_outside_dismiss {
                 let root_pointer = root.clone();
                 let on_dismiss = on_dismiss.clone();
                 let on_pointer_down_outside = on_pointer_down_outside.clone();
@@ -142,6 +150,7 @@ pub fn DismissibleLayer(
     {
         let _ = on_pointer_down_outside;
         let _ = on_focus_outside;
+        let _ = disable_pointer_down_outside_dismiss;
         let _ = disable_outside_pointer_events;
     }
 
@@ -152,9 +161,18 @@ pub fn DismissibleLayer(
     }
 }
 
+fn pointer_down_outside_dismiss_disabled(
+    disable_pointer_down_outside_dismiss: bool,
+    disable_outside_pointer_events: bool,
+) -> bool {
+    disable_pointer_down_outside_dismiss || disable_outside_pointer_events
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{dismissible_is_escape, dismissible_is_outside};
+    use super::{
+        dismissible_is_escape, dismissible_is_outside, pointer_down_outside_dismiss_disabled,
+    };
 
     #[test]
     fn dismissible_escape_match() {
@@ -166,5 +184,20 @@ mod tests {
     fn dismissible_outside_check() {
         assert!(dismissible_is_outside(false));
         assert!(!dismissible_is_outside(true));
+    }
+
+    #[test]
+    fn canonical_pointer_down_outside_dismiss_flag_disables_behavior() {
+        assert!(pointer_down_outside_dismiss_disabled(true, false));
+    }
+
+    #[test]
+    fn legacy_pointer_event_flag_remains_a_compatibility_alias() {
+        assert!(pointer_down_outside_dismiss_disabled(false, true));
+    }
+
+    #[test]
+    fn outside_pointer_dismiss_stays_enabled_when_both_flags_are_false() {
+        assert!(!pointer_down_outside_dismiss_disabled(false, false));
     }
 }

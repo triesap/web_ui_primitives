@@ -66,6 +66,7 @@ view! {
 - `Primitive*` names remain as deprecated aliases for the new `Dom*` and `BoundElement` surface.
 - `use_primitive` remains as a deprecated alias for `use_dom_bindings`.
 - `Dismissable*` names remain as deprecated aliases for `Dismissible*`.
+- `DismissibleLayer` now uses `disable_pointer_down_outside_dismiss` as the canonical prop name; `disable_outside_pointer_events` remains as a compatibility alias for the same behavior.
 
 ## Contributing
 
