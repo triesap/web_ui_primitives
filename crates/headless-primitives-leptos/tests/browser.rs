@@ -763,6 +763,164 @@ fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
 }
 
 #[wasm_bindgen_test]
+fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount() {
+    let host = append_div("dismissible-stack-restore-host");
+    let outside = append_button("dismissible-stack-restore-outside");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+
+        view! {
+            <DismissibleLayer on_dismiss=outer_on_dismiss>
+                <button id="dismissible-stack-restore-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer on_dismiss=on_dismiss>
+                                <button id="dismissible-stack-restore-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    let outer = html_element_by_id("dismissible-stack-restore-outer");
+
+    dispatch_pointer_down(&outer);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+    assert!(
+        document()
+            .get_element_by_id("dismissible-stack-restore-inner")
+            .is_none()
+    );
+
+    dispatch_pointer_down(&outside);
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+
+    outer.focus().expect("focus outer");
+    outside.focus().expect("focus outside");
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
+    let host = append_div("dismissible-stack-restore-escape-host");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+
+        view! {
+            <DismissibleLayer on_dismiss=outer_on_dismiss>
+                <button id="dismissible-stack-restore-escape-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer on_dismiss=on_dismiss>
+                                <button id="dismissible-stack-restore-escape-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    let inner = html_element_by_id("dismissible-stack-restore-escape-inner");
+    dispatch_escape_keydown(&inner);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert!(
+        document()
+            .get_element_by_id("dismissible-stack-restore-escape-inner")
+            .is_none()
+    );
+
+    let outer = html_element_by_id("dismissible-stack-restore-escape-outer");
+    outer.focus().expect("focus outer");
+    dispatch_escape_keydown(&outer);
+
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
