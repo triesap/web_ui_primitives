@@ -7,12 +7,14 @@ use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
 
+/// A DOM attribute emitted by a headless binding helper.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DomAttribute {
     name: String,
     value: DomAttributeValue,
 }
 
+/// Supported DOM attribute value kinds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomAttributeValue {
     String(String),
@@ -20,6 +22,7 @@ pub enum DomAttributeValue {
 }
 
 impl DomAttribute {
+    /// Creates a string-valued attribute.
     pub fn string(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -27,6 +30,7 @@ impl DomAttribute {
         }
     }
 
+    /// Creates a boolean attribute.
     pub fn bool(name: impl Into<String>, value: bool) -> Self {
         Self {
             name: name.into(),
@@ -34,15 +38,21 @@ impl DomAttribute {
         }
     }
 
+    /// Returns the attribute name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns the attribute value.
     pub fn value(&self) -> &DomAttributeValue {
         &self.value
     }
 }
 
+/// Event callback type used by [`DomEventBinding`].
+///
+/// On non-wasm targets this is a placeholder signature so unit tests and docs
+/// can compile without a browser runtime.
 #[cfg(target_arch = "wasm32")]
 pub type DomEventHandler = Callback<web_sys::Event>;
 #[cfg(not(target_arch = "wasm32"))]
@@ -50,33 +60,46 @@ pub type DomEventHandler = Callback<()>;
 
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 #[derive(Clone)]
+/// An event listener attached by [`use_dom_bindings`].
 pub struct DomEventBinding {
     name: &'static str,
     handler: DomEventHandler,
 }
 
 impl DomEventBinding {
+    /// Creates a named DOM event binding.
     pub fn new(name: &'static str, handler: DomEventHandler) -> Self {
         Self { name, handler }
     }
 
+    /// Returns the DOM event name.
     pub fn name(&self) -> &'static str {
         self.name
     }
 }
 
+/// Concrete DOM target type used by binding helpers.
+///
+/// On non-wasm targets this becomes `()` because there is no live DOM to
+/// mutate during unit tests or rustdoc builds.
 #[cfg(target_arch = "wasm32")]
 pub type DomTarget = web_sys::Element;
 #[cfg(not(target_arch = "wasm32"))]
 pub type DomTarget = ();
 
+/// Errors emitted while applying DOM bindings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DomBindingError {
     AttributeUnavailable,
 }
 
+/// Result type used by DOM binding helpers.
 pub type DomBindingResult<T> = Result<T, DomBindingError>;
 
+/// Handle returned by [`use_dom_bindings`].
+///
+/// Call [`BoundElement::node_ref`] and pass the returned [`NodeRef`] to the
+/// element you want to bind.
 #[derive(Clone)]
 pub struct BoundElement<E>
 where
@@ -89,12 +112,17 @@ impl<E> BoundElement<E>
 where
     E: html::ElementType,
 {
+    /// Returns the [`NodeRef`] that should be attached to the target element.
     pub fn node_ref(&self) -> NodeRef<E> {
         self.node_ref
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+/// Creates a binding handle for a Leptos element.
+///
+/// This is a no-op on non-wasm targets so tests and rustdoc builds can compile
+/// without a browser environment.
 pub fn use_dom_bindings<E>(
     attrs: impl Into<Signal<Vec<DomAttribute>>>,
     events: Vec<DomEventBinding>,
@@ -110,6 +138,8 @@ where
 }
 
 #[cfg(target_arch = "wasm32")]
+/// Creates a binding handle for a Leptos element and attaches reactive
+/// attributes and event listeners when the element loads.
 pub fn use_dom_bindings<E>(
     attrs: impl Into<Signal<Vec<DomAttribute>>>,
     events: Vec<DomEventBinding>,
@@ -151,8 +181,7 @@ fn attach_dom_bindings<E>(
         Effect::new(move || {
             let next = attrs.get();
             let mut previous = prev_attrs.borrow_mut();
-            if let Ok(normalized) =
-                apply_dom_attribute_delta(&element_for_effect, &previous, &next)
+            if let Ok(normalized) = apply_dom_attribute_delta(&element_for_effect, &previous, &next)
             {
                 *previous = normalized;
             }
@@ -193,6 +222,11 @@ struct EventHandle {
     closure: wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>,
 }
 
+/// Applies the delta from `previous` to `next` and returns the normalized
+/// attribute set that should be treated as current state.
+///
+/// This mutates the target only on wasm builds. On host builds it behaves as a
+/// pure normalization helper.
 pub fn apply_dom_attribute_delta(
     target: &DomTarget,
     previous: &[DomAttribute],

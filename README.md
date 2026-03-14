@@ -16,20 +16,41 @@ Headless, accessible UI primitives for Rust web frameworks.
 
 ## How it works
 
-Core models expose state. Framework bindings expose helpers that generate DOM attributes/events, plus primitives for behavior like focus or dismissable layers.
+Core models expose state. Framework bindings expose helpers that generate DOM attributes and event bindings, plus behavior primitives such as focus scopes and dismissible layers.
+
+## Using the crates
+
+Use the umbrella crate when you want one dependency with feature-gated adapters:
+
+```toml
+[dependencies]
+headless-primitives = { version = "0.1.0", features = ["leptos"] }
+leptos = { version = "0.8.16", features = ["csr"] }
+```
+
+Use the adapter crate directly when you want explicit control over the dependency graph:
+
+```toml
+[dependencies]
+headless-primitives-core = "0.1.0"
+headless-primitives-leptos = "0.1.0"
+leptos = { version = "0.8.16", features = ["csr"] }
+```
 
 Example (Leptos):
 
 ```rust
+use leptos::html;
 use leptos::prelude::*;
 use headless_primitives::core::collapsible::CollapsibleModel;
 use headless_primitives::leptos::{builders::collapsible_trigger_attrs, use_dom_bindings};
 
 let model = RwSignal::new(CollapsibleModel::new(false));
-let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), None));
+let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), Some("details")));
+let bindings = use_dom_bindings::<html::Button>(attrs, vec![]);
 
 view! {
-    <button node_ref=use_dom_bindings(attrs, vec![])>
+    <button node_ref=bindings.node_ref()>
         "Toggle"
     </button>
 }
@@ -39,6 +60,12 @@ view! {
 
 - `core` (default): core models and state machines
 - `leptos`: Leptos bindings (depends on `headless-primitives-core`)
+
+## Migration
+
+- `Primitive*` names remain as deprecated aliases for the new `Dom*` and `BoundElement` surface.
+- `use_primitive` remains as a deprecated alias for `use_dom_bindings`.
+- `Dismissable*` names remain as deprecated aliases for `Dismissible*`.
 
 ## Contributing
 

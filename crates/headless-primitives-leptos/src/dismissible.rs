@@ -2,6 +2,7 @@ use leptos::ev::{FocusEvent, KeyboardEvent, PointerEvent};
 use leptos::html;
 use leptos::prelude::*;
 
+/// Reason emitted by [`DismissibleLayer`] when it requests dismissal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DismissibleReason {
     Escape,
@@ -9,15 +10,22 @@ pub enum DismissibleReason {
     FocusOutside,
 }
 
+/// Returns `true` when a key value should dismiss via escape handling.
 pub fn dismissible_is_escape(key: &str) -> bool {
     key == "Escape"
 }
 
+/// Returns `true` when an interaction target is outside the active layer.
 pub fn dismissible_is_outside(is_inside: bool) -> bool {
     !is_inside
 }
 
 #[component]
+/// Headless layer that reports escape, outside pointer, and outside focus
+/// dismissal requests.
+///
+/// `disable_outside_pointer_events` only suppresses pointer-down-outside
+/// dismissal handling. It does not mutate CSS `pointer-events`.
 pub fn DismissibleLayer(
     #[prop(optional)] on_dismiss: Option<Callback<DismissibleReason>>,
     #[prop(optional)] on_escape_key_down: Option<Callback<KeyboardEvent>>,
