@@ -493,6 +493,169 @@ fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_
 }
 
 #[wasm_bindgen_test]
+fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
+    let host = append_div("dismissible-callback-pointer-host");
+    let outside = append_div("dismissible-callback-pointer-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_targets_handle = Arc::clone(&pointer_targets);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+    let escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let escape_keys_handle = Arc::clone(&escape_keys);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_targets = Arc::clone(&pointer_targets_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+        let escape_keys = Arc::clone(&escape_keys_handle);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    pointer_targets
+                        .lock()
+                        .expect("pointer targets lock")
+                        .push(target_id);
+                })
+                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    focus_targets
+                        .lock()
+                        .expect("focus targets lock")
+                        .push(target_id);
+                })
+                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                    escape_keys
+                        .lock()
+                        .expect("escape keys lock")
+                        .push(event.key());
+                })
+            >
+                <button id="dismissible-callback-pointer-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    dispatch_pointer_down(&outside);
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+    assert_eq!(
+        pointer_targets
+            .lock()
+            .expect("pointer targets lock")
+            .as_slice(),
+        &["dismissible-callback-pointer-outside".to_string()]
+    );
+    assert!(focus_targets.lock().expect("focus targets lock").is_empty());
+    assert!(escape_keys.lock().expect("escape keys lock").is_empty());
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
+    let host = append_div("dismissible-callback-focus-host");
+    let outside = append_button("dismissible-callback-focus-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_targets_handle = Arc::clone(&pointer_targets);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+    let escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let escape_keys_handle = Arc::clone(&escape_keys);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_targets = Arc::clone(&pointer_targets_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+        let escape_keys = Arc::clone(&escape_keys_handle);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    pointer_targets
+                        .lock()
+                        .expect("pointer targets lock")
+                        .push(target_id);
+                })
+                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    focus_targets
+                        .lock()
+                        .expect("focus targets lock")
+                        .push(target_id);
+                })
+                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                    escape_keys
+                        .lock()
+                        .expect("escape keys lock")
+                        .push(event.key());
+                })
+            >
+                <button id="dismissible-callback-focus-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-callback-focus-inside");
+
+    inside.focus().expect("focus inside");
+    outside.focus().expect("focus outside");
+    inside.focus().expect("restore focus inside");
+    dispatch_escape_keydown(&inside);
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::FocusOutside, DismissibleReason::Escape]
+    );
+    assert!(pointer_targets.lock().expect("pointer targets lock").is_empty());
+    assert_eq!(
+        focus_targets.lock().expect("focus targets lock").as_slice(),
+        &["dismissible-callback-focus-outside".to_string()]
+    );
+    assert_eq!(
+        escape_keys.lock().expect("escape keys lock").as_slice(),
+        &["Escape".to_string()]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
