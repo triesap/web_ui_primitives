@@ -2396,6 +2396,126 @@ fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
 }
 
 #[wasm_bindgen_test]
+fn portal_retargets_live_between_explicit_targets_without_teardown() {
+    let host = append_div("portal-retarget-host");
+    let first_target = append_div("portal-retarget-first-target");
+    let second_target = append_div("portal-retarget-second-target");
+    let use_first_target = RwSignal::new(true);
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            {move || {
+                let mount = if use_first_target.get() {
+                    document()
+                        .get_element_by_id("portal-retarget-first-target")
+                        .expect("first retarget portal target")
+                } else {
+                    document()
+                        .get_element_by_id("portal-retarget-second-target")
+                        .expect("second retarget portal target")
+                };
+
+                view! {
+                    <Portal mount=mount>
+                        <span>"Retargeted"</span>
+                    </Portal>
+                }
+            }}
+        }
+    });
+
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.text_content().as_deref(), Some("Retargeted"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    use_first_target.set(false);
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().as_deref(), Some("Retargeted"));
+    assert_eq!(second_target.child_element_count(), 1);
+
+    use_first_target.set(true);
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.text_content().as_deref(), Some("Retargeted"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    drop(mount);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    remove_from_body(&host);
+    remove_from_body(&first_target);
+    remove_from_body(&second_target);
+}
+
+#[wasm_bindgen_test]
+fn portal_live_retargeting_keeps_only_one_copy_while_content_changes() {
+    let host = append_div("portal-retarget-content-host");
+    let first_target = append_div("portal-retarget-content-first-target");
+    let second_target = append_div("portal-retarget-content-second-target");
+    let use_first_target = RwSignal::new(true);
+    let label = RwSignal::new("One");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            {move || {
+                let mount = if use_first_target.get() {
+                    document()
+                        .get_element_by_id("portal-retarget-content-first-target")
+                        .expect("first content retarget target")
+                } else {
+                    document()
+                        .get_element_by_id("portal-retarget-content-second-target")
+                        .expect("second content retarget target")
+                };
+                let text = label.get();
+
+                view! {
+                    <Portal mount=mount>
+                        <span>{text}</span>
+                    </Portal>
+                }
+            }}
+        }
+    });
+
+    assert_eq!(first_target.text_content().as_deref(), Some("One"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.child_element_count(), 0);
+
+    label.set("Two");
+    use_first_target.set(false);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().as_deref(), Some("Two"));
+    assert_eq!(second_target.child_element_count(), 1);
+
+    label.set("Three");
+    use_first_target.set(true);
+    assert_eq!(first_target.text_content().as_deref(), Some("Three"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    drop(mount);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    remove_from_body(&host);
+    remove_from_body(&first_target);
+    remove_from_body(&second_target);
+}
+
+#[wasm_bindgen_test]
 fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
     let shell = append_div("modal-shell");
     let left = append_child_div(&shell, "modal-left");
