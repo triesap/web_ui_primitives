@@ -1,6 +1,8 @@
 #![cfg(target_arch = "wasm32")]
 
-use headless_primitives_leptos::{DismissibleLayer, DismissibleReason, Portal};
+use headless_primitives_leptos::{
+    DismissibleLayer, DismissibleReason, Portal, modal_hide_siblings,
+};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -31,6 +33,17 @@ fn append_div(id: &str) -> web_sys::HtmlElement {
     element
 }
 
+fn append_child_div(parent: &web_sys::HtmlElement, id: &str) -> web_sys::HtmlElement {
+    let element = document()
+        .create_element("div")
+        .expect("create child div")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("child html element");
+    element.set_id(id);
+    parent.append_child(&element).expect("append child div");
+    element
+}
+
 fn remove_from_body(element: &web_sys::HtmlElement) {
     body().remove_child(element).expect("remove element");
 }
@@ -42,6 +55,10 @@ fn dispatch_pointer_down(target: &web_sys::HtmlElement) {
     let event = web_sys::PointerEvent::new_with_event_init_dict("pointerdown", &init)
         .expect("pointer event");
     target.dispatch_event(&event).expect("dispatch pointerdown");
+}
+
+fn attr(element: &web_sys::HtmlElement, name: &str) -> Option<String> {
+    element.get_attribute(name)
 }
 
 #[wasm_bindgen_test]
@@ -105,4 +122,86 @@ fn portal_mounts_children_into_the_explicit_target() {
 
     remove_from_body(&host);
     remove_from_body(&target);
+}
+
+#[wasm_bindgen_test]
+fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
+    let shell = append_div("modal-shell");
+    let left = append_child_div(&shell, "modal-left");
+    let active_branch = append_child_div(&shell, "modal-active-branch");
+    let right = append_child_div(&shell, "modal-right");
+    let root = append_child_div(&active_branch, "modal-root");
+    let branch_sibling = append_child_div(&active_branch, "modal-branch-sibling");
+
+    left.set_attribute("aria-hidden", "false")
+        .expect("set previous aria-hidden");
+    right
+        .set_attribute("inert", "")
+        .expect("set previous inert");
+
+    let root_element: web_sys::Element = root.clone().into();
+    let guard = modal_hide_siblings(&root_element).expect("modal guard");
+
+    assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("true"));
+    assert!(left.has_attribute("inert"));
+    assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
+    assert!(right.has_attribute("inert"));
+    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert!(branch_sibling.has_attribute("inert"));
+
+    assert!(attr(&shell, "aria-hidden").is_none());
+    assert!(attr(&active_branch, "aria-hidden").is_none());
+    assert!(attr(&root, "aria-hidden").is_none());
+
+    drop(guard);
+
+    assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("false"));
+    assert!(!left.has_attribute("inert"));
+    assert!(attr(&right, "aria-hidden").is_none());
+    assert!(right.has_attribute("inert"));
+    assert!(attr(&branch_sibling, "aria-hidden").is_none());
+    assert!(!branch_sibling.has_attribute("inert"));
+
+    remove_from_body(&shell);
+}
+
+#[wasm_bindgen_test]
+fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
+    let shell = append_div("nested-modal-shell");
+    let left = append_child_div(&shell, "nested-modal-left");
+    let active_branch = append_child_div(&shell, "nested-modal-active-branch");
+    let right = append_child_div(&shell, "nested-modal-right");
+    let outer_root = append_child_div(&active_branch, "nested-modal-outer-root");
+    let branch_sibling = append_child_div(&active_branch, "nested-modal-branch-sibling");
+    let inner_sibling = append_child_div(&outer_root, "nested-modal-inner-sibling");
+    let inner_root = append_child_div(&outer_root, "nested-modal-inner-root");
+
+    let outer_root_element: web_sys::Element = outer_root.clone().into();
+    let inner_root_element: web_sys::Element = inner_root.clone().into();
+
+    let outer_guard = modal_hide_siblings(&outer_root_element).expect("outer modal guard");
+    assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert!(attr(&inner_sibling, "aria-hidden").is_none());
+
+    let inner_guard = modal_hide_siblings(&inner_root_element).expect("inner modal guard");
+    assert_eq!(attr(&inner_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert!(inner_sibling.has_attribute("inert"));
+
+    drop(inner_guard);
+
+    assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert!(attr(&inner_sibling, "aria-hidden").is_none());
+    assert!(!inner_sibling.has_attribute("inert"));
+
+    drop(outer_guard);
+
+    assert!(attr(&left, "aria-hidden").is_none());
+    assert!(attr(&right, "aria-hidden").is_none());
+    assert!(attr(&branch_sibling, "aria-hidden").is_none());
+
+    remove_from_body(&shell);
 }
