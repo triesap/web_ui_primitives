@@ -1,4 +1,4 @@
-//! Attribute builders for tabs state.
+//! Attribute helpers for tabs state.
 
 use crate::DomAttribute;
 use headless_primitives_core::orientation::Orientation;

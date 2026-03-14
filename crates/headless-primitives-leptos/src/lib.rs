@@ -2,7 +2,7 @@
 //!
 //! The crate exposes two layers:
 //!
-//! - `builders`: pure helpers that derive DOM attributes from core state models.
+//! - `attrs`: pure helpers that derive DOM attributes from core state models.
 //! - behavioral primitives such as [`FocusScope`], [`DismissibleLayer`],
 //!   [`Portal`], [`Presence`], and [`ModalGuard`].
 //!
@@ -10,7 +10,7 @@
 //!
 //! ```rust,no_run
 //! use headless_primitives_core::collapsible::CollapsibleModel;
-//! use headless_primitives_leptos::{builders::collapsible_trigger_attrs, use_dom_bindings};
+//! use headless_primitives_leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
 //! use leptos::html;
 //! use leptos::prelude::*;
 //!
@@ -27,7 +27,7 @@
 //!
 #![forbid(unsafe_code)]
 
-pub mod builders;
+pub mod attrs;
 mod dismissible;
 mod dom_bindings;
 mod focus;

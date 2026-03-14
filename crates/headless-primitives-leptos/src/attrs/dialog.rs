@@ -1,4 +1,4 @@
-//! Attribute builders for dialog state.
+//! Attribute helpers for dialog state.
 
 use crate::DomAttribute;
 use headless_primitives_core::dialog::{DialogModel, DialogState};

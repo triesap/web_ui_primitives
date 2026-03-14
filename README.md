@@ -42,7 +42,7 @@ Example (Leptos):
 use leptos::html;
 use leptos::prelude::*;
 use headless_primitives::core::collapsible::CollapsibleModel;
-use headless_primitives::leptos::{builders::collapsible_trigger_attrs, use_dom_bindings};
+use headless_primitives::leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
 
 let model = RwSignal::new(CollapsibleModel::new(false));
 let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), Some("details")));

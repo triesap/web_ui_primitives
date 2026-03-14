@@ -6,7 +6,7 @@ Thanks for your interest in contributing to headless-primitives.
 
 - Report bugs and regressions
 - Improve documentation and examples
-- Add new headless builders or framework bindings
+- Add new attribute helpers or framework bindings
 - Expand accessibility and keyboard coverage
 
 ## Development setup

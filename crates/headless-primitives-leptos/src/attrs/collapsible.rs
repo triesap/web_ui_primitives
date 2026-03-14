@@ -1,6 +1,7 @@
 use crate::DomAttribute;
 use headless_primitives_core::collapsible::{CollapsibleModel, CollapsibleState};
 
+/// Returns trigger attributes for a collapsible toggle element.
 pub fn collapsible_trigger_attrs(
     model: &CollapsibleModel,
     controls: Option<&str>,
@@ -22,6 +23,7 @@ pub fn collapsible_trigger_attrs(
     attrs
 }
 
+/// Returns content attributes for a collapsible content element.
 pub fn collapsible_content_attrs(
     model: &CollapsibleModel,
     content_id: Option<&str>,

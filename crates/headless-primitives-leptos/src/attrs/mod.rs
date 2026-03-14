@@ -1,4 +1,4 @@
-//! Attribute builders for headless widget state models.
+//! Attribute helpers for headless widget state models.
 //!
 //! These helpers are pure functions: they derive [`crate::DomAttribute`] values
 //! from core state without attaching listeners or mutating the DOM.
