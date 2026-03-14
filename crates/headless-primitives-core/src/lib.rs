@@ -7,10 +7,10 @@
 //! - [`DialogModel`]
 //! - [`TabsModel`]
 //!
-//! Lower-level modules such as [`roving_focus`], [`typeahead`], [`controlled`],
-//! [`ids`], and [`state_machine`] remain public as deliberate extension points
-//! for custom headless interactions. They complement the widget models above,
-//! but they are not the primary entry point for most consumers.
+//! Lower-level interaction utilities such as [`roving_focus`] and
+//! [`typeahead`] remain public for custom composite widgets. They complement
+//! the widget models above, but they are not the primary entry point for most
+//! consumers.
 //!
 //! ```rust
 //! use headless_primitives_core::{TabsActivation, TabsModel};
@@ -33,18 +33,12 @@ extern crate alloc;
 
 /// Headless state model for collapsible regions.
 pub mod collapsible;
-/// Advanced controlled-value helper for custom interaction state.
-pub mod controlled;
 /// Headless state model for dialogs.
 pub mod dialog;
-/// Deterministic ID helpers for headless widgets.
-pub mod ids;
 /// Shared orientation enum used by interaction models.
 pub mod orientation;
 /// Low-level roving focus utilities used by composite widgets.
 pub mod roving_focus;
-/// Generic state machine helper for custom interaction orchestration.
-pub mod state_machine;
 /// Headless state model for tabs.
 pub mod tabs;
 /// Low-level typeahead matching helper.
