@@ -1,17 +1,20 @@
-use crate::PrimitiveAttribute;
+use crate::DomAttribute;
 use headless_primitives_core::dialog::{DialogModel, DialogState};
 
-pub fn dialog_trigger_attrs(model: &DialogModel, controls_id: Option<&str>) -> Vec<PrimitiveAttribute> {
+pub fn dialog_trigger_attrs(
+    model: &DialogModel,
+    controls_id: Option<&str>,
+) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
     let state = dialog_state_value(model.state());
-    attrs.push(PrimitiveAttribute::string("data-state", state));
-    attrs.push(PrimitiveAttribute::string("aria-haspopup", "dialog"));
-    attrs.push(PrimitiveAttribute::string(
+    attrs.push(DomAttribute::string("data-state", state));
+    attrs.push(DomAttribute::string("aria-haspopup", "dialog"));
+    attrs.push(DomAttribute::string(
         "aria-expanded",
         if model.open() { "true" } else { "false" },
     ));
     if let Some(controls) = controls_id {
-        attrs.push(PrimitiveAttribute::string("aria-controls", controls));
+        attrs.push(DomAttribute::string("aria-controls", controls));
     }
     attrs
 }
@@ -20,20 +23,20 @@ pub fn dialog_content_attrs(
     model: &DialogModel,
     labelled_by: Option<&str>,
     described_by: Option<&str>,
-) -> Vec<PrimitiveAttribute> {
+) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
     let state = dialog_state_value(model.state());
-    attrs.push(PrimitiveAttribute::string("data-state", state));
-    attrs.push(PrimitiveAttribute::string("role", "dialog"));
-    attrs.push(PrimitiveAttribute::string("tabindex", "-1"));
+    attrs.push(DomAttribute::string("data-state", state));
+    attrs.push(DomAttribute::string("role", "dialog"));
+    attrs.push(DomAttribute::string("tabindex", "-1"));
     if model.modal() {
-        attrs.push(PrimitiveAttribute::string("aria-modal", "true"));
+        attrs.push(DomAttribute::string("aria-modal", "true"));
     }
     if let Some(label) = labelled_by {
-        attrs.push(PrimitiveAttribute::string("aria-labelledby", label));
+        attrs.push(DomAttribute::string("aria-labelledby", label));
     }
     if let Some(description) = described_by {
-        attrs.push(PrimitiveAttribute::string("aria-describedby", description));
+        attrs.push(DomAttribute::string("aria-describedby", description));
     }
     attrs
 }
@@ -48,7 +51,7 @@ fn dialog_state_value(state: DialogState) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{dialog_content_attrs, dialog_trigger_attrs};
-    use crate::PrimitiveAttributeValue;
+    use crate::DomAttributeValue;
     use headless_primitives_core::dialog::DialogModel;
 
     #[test]
@@ -59,10 +62,7 @@ mod tests {
             .iter()
             .find(|attr| attr.name() == "aria-expanded")
             .expect("aria-expanded");
-        assert_eq!(
-            expanded.value(),
-            &PrimitiveAttributeValue::String("true".to_string())
-        );
+        assert_eq!(expanded.value(), &DomAttributeValue::String("true".to_string()));
     }
 
     #[test]
