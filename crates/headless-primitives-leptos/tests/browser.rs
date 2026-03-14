@@ -2047,6 +2047,201 @@ fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
 }
 
 #[wasm_bindgen_test]
+fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remount() {
+    let host = append_div("dismissible-remount-doc-host");
+    let outside = append_button("dismissible-remount-doc-outside");
+    let present = RwSignal::new(true);
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_targets_handle = Arc::clone(&pointer_targets);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_targets = Arc::clone(&pointer_targets_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+        let on_dismiss = Callback::new(move |reason| {
+            dismissals.lock().expect("dismissals lock").push(reason);
+        });
+        let on_pointer_down_outside = Callback::new(move |event: leptos::ev::PointerEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            pointer_targets
+                .lock()
+                .expect("pointer targets lock")
+                .push(target_id);
+        });
+        let on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            focus_targets
+                .lock()
+                .expect("focus targets lock")
+                .push(target_id);
+        });
+
+        view! {
+            {move || {
+                present.get().then(|| {
+                    let on_dismiss = on_dismiss.clone();
+                    let on_pointer_down_outside = on_pointer_down_outside.clone();
+                    let on_focus_outside = on_focus_outside.clone();
+                    view! {
+                        <DismissibleLayer
+                            on_dismiss=on_dismiss
+                            on_pointer_down_outside=on_pointer_down_outside
+                            on_focus_outside=on_focus_outside
+                        >
+                            <button id="dismissible-remount-doc-inner">"Inner"</button>
+                        </DismissibleLayer>
+                    }
+                })
+            }}
+        }
+    });
+
+    for cycle in 0..2 {
+        if cycle > 0 {
+            present.set(true);
+        }
+
+        let inner = html_element_by_id("dismissible-remount-doc-inner");
+        inner.focus().expect("focus inner");
+        dispatch_pointer_down(&outside);
+        outside.focus().expect("focus outside");
+
+        assert_eq!(
+            dismissals.lock().expect("dismissals lock").len(),
+            (cycle + 1) * 2
+        );
+        assert_eq!(
+            pointer_targets.lock().expect("pointer targets lock").len(),
+            cycle + 1
+        );
+        assert_eq!(
+            focus_targets.lock().expect("focus targets lock").len(),
+            cycle + 1
+        );
+
+        present.set(false);
+        assert!(host.first_element_child().is_none());
+    }
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside,
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        pointer_targets
+            .lock()
+            .expect("pointer targets lock")
+            .as_slice(),
+        &[
+            "dismissible-remount-doc-outside".to_string(),
+            "dismissible-remount-doc-outside".to_string()
+        ]
+    );
+    assert_eq!(
+        focus_targets.lock().expect("focus targets lock").as_slice(),
+        &[
+            "dismissible-remount-doc-outside".to_string(),
+            "dismissible-remount-doc-outside".to_string()
+        ]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
+    let host = append_div("dismissible-remount-escape-host");
+    let present = RwSignal::new(true);
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let escape_keys_handle = Arc::clone(&escape_keys);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let escape_keys = Arc::clone(&escape_keys_handle);
+        let on_dismiss = Callback::new(move |reason| {
+            dismissals.lock().expect("dismissals lock").push(reason);
+        });
+        let on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
+            escape_keys
+                .lock()
+                .expect("escape keys lock")
+                .push(event.key());
+        });
+
+        view! {
+            {move || {
+                present.get().then(|| {
+                    let on_dismiss = on_dismiss.clone();
+                    let on_escape_key_down = on_escape_key_down.clone();
+                    view! {
+                        <DismissibleLayer
+                            on_dismiss=on_dismiss
+                            on_escape_key_down=on_escape_key_down
+                        >
+                            <button id="dismissible-remount-escape-inner">"Inner"</button>
+                        </DismissibleLayer>
+                    }
+                })
+            }}
+        }
+    });
+
+    for cycle in 0..2 {
+        if cycle > 0 {
+            present.set(true);
+        }
+
+        let inner = html_element_by_id("dismissible-remount-escape-inner");
+        dispatch_escape_keydown(&inner);
+
+        assert_eq!(
+            dismissals.lock().expect("dismissals lock").len(),
+            cycle + 1
+        );
+        assert_eq!(
+            escape_keys.lock().expect("escape keys lock").len(),
+            cycle + 1
+        );
+
+        present.set(false);
+        assert!(host.first_element_child().is_none());
+    }
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape, DismissibleReason::Escape]
+    );
+    assert_eq!(
+        escape_keys.lock().expect("escape keys lock").as_slice(),
+        &["Escape".to_string(), "Escape".to_string()]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
