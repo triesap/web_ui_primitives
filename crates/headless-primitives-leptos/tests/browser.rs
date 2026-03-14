@@ -1587,6 +1587,209 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
 }
 
 #[wasm_bindgen_test]
+fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() {
+    let host = append_div("dismissible-reuse-doc-host");
+    let outside = append_button("dismissible-reuse-doc-outside");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+    let outer_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_focus_targets_handle = Arc::clone(&outer_focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_focus_targets = Arc::clone(&outer_focus_targets_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            outer_focus_targets
+                .lock()
+                .expect("outer focus targets lock")
+                .push(target_id);
+        });
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=outer_on_dismiss
+                on_focus_outside=outer_on_focus_outside
+            >
+                <button id="dismissible-reuse-doc-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer on_dismiss=on_dismiss>
+                                <button id="dismissible-reuse-doc-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    for cycle in 0..2 {
+        if cycle > 0 {
+            inner_present.set(true);
+        }
+
+        let outer = html_element_by_id("dismissible-reuse-doc-outer");
+        dispatch_pointer_down(&outer);
+
+        assert_eq!(
+            inner_dismissals.lock().expect("inner dismissals lock").len(),
+            cycle + 1
+        );
+        assert_eq!(
+            outer_dismissals.lock().expect("outer dismissals lock").len(),
+            cycle * 2
+        );
+        assert!(
+            document()
+                .get_element_by_id("dismissible-reuse-doc-inner")
+                .is_none()
+        );
+
+        dispatch_pointer_down(&outside);
+        outer.focus().expect("focus outer");
+        outside.focus().expect("focus outside");
+    }
+
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::PointerDownOutside
+        ]
+    );
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside,
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        outer_focus_targets
+            .lock()
+            .expect("outer focus targets lock")
+            .as_slice(),
+        &[
+            "dismissible-reuse-doc-outside".to_string(),
+            "dismissible-reuse-doc-outside".to_string()
+        ]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
+    let host = append_div("dismissible-reuse-escape-host");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+
+        view! {
+            <DismissibleLayer on_dismiss=outer_on_dismiss>
+                <button id="dismissible-reuse-escape-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer on_dismiss=on_dismiss>
+                                <button id="dismissible-reuse-escape-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    for cycle in 0..2 {
+        if cycle > 0 {
+            inner_present.set(true);
+        }
+
+        let inner = html_element_by_id("dismissible-reuse-escape-inner");
+        dispatch_escape_keydown(&inner);
+
+        assert_eq!(
+            inner_dismissals.lock().expect("inner dismissals lock").len(),
+            cycle + 1
+        );
+        assert_eq!(
+            outer_dismissals.lock().expect("outer dismissals lock").len(),
+            cycle
+        );
+        assert!(
+            document()
+                .get_element_by_id("dismissible-reuse-escape-inner")
+                .is_none()
+        );
+
+        let outer = html_element_by_id("dismissible-reuse-escape-outer");
+        outer.focus().expect("focus outer");
+        dispatch_escape_keydown(&outer);
+    }
+
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape, DismissibleReason::Escape]
+    );
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[DismissibleReason::Escape, DismissibleReason::Escape]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
