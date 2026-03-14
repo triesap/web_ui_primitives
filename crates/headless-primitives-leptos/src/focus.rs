@@ -13,19 +13,25 @@ pub fn focus_scope_selector() -> &'static str {
 }
 
 pub fn focus_scope_next_index(current: usize, count: usize, shift: bool) -> usize {
+    focus_scope_target_index(Some(current), count, shift)
+}
+
+fn focus_scope_target_index(current: Option<usize>, count: usize, shift: bool) -> usize {
     if count == 0 {
         return 0;
     }
-    if shift {
-        if current == 0 {
-            count - 1
-        } else {
-            current - 1
+    match current {
+        Some(current) if shift => {
+            if current == 0 {
+                count - 1
+            } else {
+                current - 1
+            }
         }
-    } else if current + 1 >= count {
-        0
-    } else {
-        current + 1
+        Some(current) if current + 1 >= count => 0,
+        Some(current) => current + 1,
+        None if shift => count - 1,
+        None => 0,
     }
 }
 
@@ -43,6 +49,7 @@ pub fn FocusScope(
     #[cfg(target_arch = "wasm32")]
     {
         use send_wrapper::SendWrapper;
+        use wasm_bindgen::JsCast;
         use wasm_bindgen::closure::Closure;
 
         let on_mount_auto_focus = on_mount_auto_focus.clone();
@@ -70,13 +77,21 @@ pub fn FocusScope(
                     if event.key() != "Tab" {
                         return;
                     }
+                    event.prevent_default();
                     let _ = focus_scope_cycle(&root_focus, &document_focus, event.shift_key());
                 }) as Box<dyn FnMut(_)>);
-                let _ = root.add_event_listener_with_callback(
-                    "keydown",
-                    handler.as_ref().unchecked_ref(),
-                );
-                handler.forget();
+                let _ = root
+                    .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+                let cleanup_root = SendWrapper::new(root.clone());
+                let cleanup_handler = SendWrapper::new(handler);
+                on_cleanup(move || {
+                    let root = cleanup_root.take();
+                    let handler = cleanup_handler.take();
+                    let _ = root.remove_event_listener_with_callback(
+                        "keydown",
+                        handler.as_ref().unchecked_ref(),
+                    );
+                });
             }
 
             if return_focus {
@@ -124,7 +139,9 @@ fn focus_scope_focus_first(
     root: &web_sys::Element,
     document: &web_sys::Document,
 ) -> Result<(), ()> {
-    let list = root.query_selector_all(FOCUSABLE_SELECTOR).map_err(|_| ())?;
+    let list = root
+        .query_selector_all(FOCUSABLE_SELECTOR)
+        .map_err(|_| ())?;
     if list.length() == 0 {
         if let Some(element) = root.dyn_ref::<web_sys::HtmlElement>() {
             let _ = element.focus();
@@ -151,13 +168,15 @@ fn focus_scope_cycle(
     document: &web_sys::Document,
     shift: bool,
 ) -> Result<(), ()> {
-    let list = root.query_selector_all(FOCUSABLE_SELECTOR).map_err(|_| ())?;
+    let list = root
+        .query_selector_all(FOCUSABLE_SELECTOR)
+        .map_err(|_| ())?;
     let count = list.length() as usize;
     if count == 0 {
         return Ok(());
     }
     let active = document.active_element();
-    let mut current_index = 0usize;
+    let mut current_index = None;
     if let Some(active) = active {
         for index in 0..count {
             let candidate = list
@@ -165,13 +184,13 @@ fn focus_scope_cycle(
                 .and_then(|node| node.dyn_into::<web_sys::Element>().ok());
             if let Some(candidate) = candidate {
                 if active.is_same_node(Some(&candidate)) {
-                    current_index = index;
+                    current_index = Some(index);
                     break;
                 }
             }
         }
     }
-    let next_index = focus_scope_next_index(current_index, count, shift);
+    let next_index = focus_scope_target_index(current_index, count, shift);
     if let Some(next) = list
         .item(next_index as u32)
         .and_then(|node| node.dyn_into::<web_sys::HtmlElement>().ok())
@@ -183,7 +202,7 @@ fn focus_scope_cycle(
 
 #[cfg(test)]
 mod tests {
-    use super::{focus_scope_next_index, focus_scope_selector};
+    use super::{focus_scope_next_index, focus_scope_selector, focus_scope_target_index};
 
     #[test]
     fn focus_scope_selector_is_non_empty() {
@@ -194,5 +213,11 @@ mod tests {
     fn focus_scope_next_index_wraps() {
         assert_eq!(focus_scope_next_index(0, 3, true), 2);
         assert_eq!(focus_scope_next_index(2, 3, false), 0);
+    }
+
+    #[test]
+    fn focus_scope_target_index_starts_from_scope_root() {
+        assert_eq!(focus_scope_target_index(None, 3, false), 0);
+        assert_eq!(focus_scope_target_index(None, 3, true), 2);
     }
 }

@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_arch = "wasm32")]
-use web_sys::{window, Element};
+use web_sys::{Element, window};
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug, Clone)]
@@ -109,33 +109,30 @@ pub fn modal_restore(id: u64) -> ModalResult<()> {
 
 #[cfg(target_arch = "wasm32")]
 fn modal_collect_hidden(root: &Element) -> ModalResult<Vec<HiddenElement>> {
-    let window = window().ok_or(ModalError::WindowUnavailable)?;
-    let document = window
-        .document()
-        .ok_or(ModalError::DocumentUnavailable)?;
-    let body = document.body().ok_or(ModalError::BodyUnavailable)?;
-    let children = body.children();
     let mut hidden = Vec::new();
-    for index in 0..children.length() {
-        let Some(child) = children.item(index) else {
-            continue;
+    let window = window().ok_or(ModalError::WindowUnavailable)?;
+    let document = window.document().ok_or(ModalError::DocumentUnavailable)?;
+    let body = document.body().ok_or(ModalError::BodyUnavailable)?;
+    let mut current = root.clone();
+
+    loop {
+        let Some(parent) = current.parent_element() else {
+            break;
         };
-        if modal_is_root_or_ancestor(root, &child) {
-            continue;
+        let children = parent.children();
+        let Some(active_index) = modal_child_index(&children, &current) else {
+            break;
+        };
+        for index in modal_hidden_sibling_indexes(active_index, children.length()) {
+            let Some(child) = children.item(index) else {
+                continue;
+            };
+            modal_hide_element(&child, &mut hidden)?;
         }
-        let prev_aria_hidden = child.get_attribute("aria-hidden");
-        let prev_inert = child.has_attribute("inert");
-        child
-            .set_attribute("aria-hidden", "true")
-            .map_err(|_| ModalError::AttributeUnavailable)?;
-        child
-            .set_attribute("inert", "")
-            .map_err(|_| ModalError::AttributeUnavailable)?;
-        hidden.push(HiddenElement {
-            element: child,
-            prev_aria_hidden,
-            prev_inert,
-        });
+        if parent.is_same_node(Some(body.as_ref())) {
+            break;
+        }
+        current = parent;
     }
     Ok(hidden)
 }
@@ -146,15 +143,50 @@ fn modal_collect_hidden(_root: &ModalTarget) -> ModalResult<Vec<HiddenElement>> 
 }
 
 #[cfg(target_arch = "wasm32")]
-fn modal_is_root_or_ancestor(root: &Element, candidate: &Element) -> bool {
-    candidate.is_same_node(Some(root)) || candidate.contains(Some(root))
+fn modal_child_index(children: &web_sys::HtmlCollection, current: &Element) -> Option<u32> {
+    for index in 0..children.length() {
+        let child = children.item(index)?;
+        if child.is_same_node(Some(current)) {
+            return Some(index);
+        }
+    }
+    None
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+fn modal_hidden_sibling_indexes(active_index: u32, sibling_count: u32) -> Vec<u32> {
+    (0..sibling_count)
+        .filter(|index| *index != active_index)
+        .collect()
 }
 
 #[cfg(target_arch = "wasm32")]
-fn modal_restore_hidden(
-    layers: &[ModalLayer],
-    hidden: Vec<HiddenElement>,
-) -> ModalResult<()> {
+fn modal_hide_element(child: &Element, hidden: &mut Vec<HiddenElement>) -> ModalResult<()> {
+    if hidden
+        .iter()
+        .any(|item| item.element.is_same_node(Some(child)))
+    {
+        return Ok(());
+    }
+
+    let prev_aria_hidden = child.get_attribute("aria-hidden");
+    let prev_inert = child.has_attribute("inert");
+    child
+        .set_attribute("aria-hidden", "true")
+        .map_err(|_| ModalError::AttributeUnavailable)?;
+    child
+        .set_attribute("inert", "")
+        .map_err(|_| ModalError::AttributeUnavailable)?;
+    hidden.push(HiddenElement {
+        element: child.clone(),
+        prev_aria_hidden,
+        prev_inert,
+    });
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn modal_restore_hidden(layers: &[ModalLayer], hidden: Vec<HiddenElement>) -> ModalResult<()> {
     for item in hidden {
         if modal_is_hidden_by_layers(layers, &item.element) {
             continue;
@@ -183,18 +215,18 @@ fn modal_restore_hidden(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn modal_restore_hidden(
-    _layers: &[ModalLayer],
-    _hidden: Vec<HiddenElement>,
-) -> ModalResult<()> {
+fn modal_restore_hidden(_layers: &[ModalLayer], _hidden: Vec<HiddenElement>) -> ModalResult<()> {
     Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
 fn modal_is_hidden_by_layers(layers: &[ModalLayer], element: &Element) -> bool {
-    layers
-        .iter()
-        .any(|layer| layer.hidden.iter().any(|item| item.element.is_same_node(Some(element))))
+    layers.iter().any(|layer| {
+        layer
+            .hidden
+            .iter()
+            .any(|item| item.element.is_same_node(Some(element)))
+    })
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -210,7 +242,7 @@ fn modal_layer_count_for_test() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{modal_hide_siblings, modal_layer_count_for_test};
+    use super::{modal_hidden_sibling_indexes, modal_hide_siblings, modal_layer_count_for_test};
 
     #[test]
     fn modal_guard_tracks_layers() {
@@ -219,5 +251,10 @@ mod tests {
         assert_eq!(modal_layer_count_for_test(), 1);
         drop(guard);
         assert_eq!(modal_layer_count_for_test(), 0);
+    }
+
+    #[test]
+    fn modal_hidden_sibling_indexes_skip_active_branch() {
+        assert_eq!(modal_hidden_sibling_indexes(1, 4), vec![0, 2, 3]);
     }
 }
