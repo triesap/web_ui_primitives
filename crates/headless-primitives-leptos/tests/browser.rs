@@ -1148,6 +1148,191 @@ fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppres
 }
 
 #[wasm_bindgen_test]
+fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount() {
+    let host = append_div("dismissible-stack-suppressed-restore-host");
+    let outside = append_button("dismissible-stack-suppressed-restore-outside");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+    let outer_focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_focus_targets_handle = Arc::clone(&outer_focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_focus_targets = Arc::clone(&outer_focus_targets_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+            let target_id = event
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            outer_focus_targets
+                .lock()
+                .expect("outer focus targets lock")
+                .push(target_id);
+        });
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=outer_on_dismiss
+                on_focus_outside=outer_on_focus_outside
+            >
+                <button id="dismissible-stack-suppressed-restore-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer
+                                disable_pointer_down_outside_dismiss=true
+                                on_dismiss=on_dismiss
+                            >
+                                <button id="dismissible-stack-suppressed-restore-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    let inner = html_element_by_id("dismissible-stack-suppressed-restore-inner");
+    inner.focus().expect("focus inner");
+    outside.focus().expect("focus outside");
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::FocusOutside]
+    );
+    assert!(
+        document()
+            .get_element_by_id("dismissible-stack-suppressed-restore-inner")
+            .is_none()
+    );
+
+    dispatch_pointer_down(&outside);
+    let outer = html_element_by_id("dismissible-stack-suppressed-restore-outer");
+    outer.focus().expect("focus outer");
+    outside.focus().expect("restore focus outside");
+
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        outer_focus_targets
+            .lock()
+            .expect("outer focus targets lock")
+            .as_slice(),
+        &["dismissible-stack-suppressed-restore-outside".to_string()]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::FocusOutside]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmount() {
+    let host = append_div("dismissible-stack-suppressed-restore-escape-host");
+    let inner_present = RwSignal::new(true);
+    let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let outer_dismissals_handle = Arc::clone(&outer_dismissals);
+    let inner_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let inner_dismissals_handle = Arc::clone(&inner_dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let outer_dismissals = Arc::clone(&outer_dismissals_handle);
+        let inner_dismissals = Arc::clone(&inner_dismissals_handle);
+        let outer_on_dismiss = Callback::new(move |reason| {
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .push(reason);
+        });
+        let inner_on_dismiss = Callback::new(move |reason| {
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .push(reason);
+            inner_present.set(false);
+        });
+
+        view! {
+            <DismissibleLayer on_dismiss=outer_on_dismiss>
+                <button id="dismissible-stack-suppressed-restore-escape-outer">"Outer"</button>
+                {move || {
+                    inner_present.get().then(|| {
+                        let on_dismiss = inner_on_dismiss.clone();
+                        view! {
+                            <DismissibleLayer
+                                disable_pointer_down_outside_dismiss=true
+                                on_dismiss=on_dismiss
+                            >
+                                <button id="dismissible-stack-suppressed-restore-escape-inner">"Inner"</button>
+                            </DismissibleLayer>
+                        }
+                    })
+                }}
+            </DismissibleLayer>
+        }
+    });
+
+    let inner = html_element_by_id("dismissible-stack-suppressed-restore-escape-inner");
+    dispatch_escape_keydown(&inner);
+
+    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert!(
+        document()
+            .get_element_by_id("dismissible-stack-suppressed-restore-escape-inner")
+            .is_none()
+    );
+
+    let outer = html_element_by_id("dismissible-stack-suppressed-restore-escape-outer");
+    outer.focus().expect("focus outer");
+    dispatch_escape_keydown(&outer);
+
+    assert_eq!(
+        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert_eq!(
+        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
