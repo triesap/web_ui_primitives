@@ -1,3 +1,8 @@
+//! Attribute builders for headless widget state models.
+//!
+//! These helpers are pure functions: they derive [`crate::DomAttribute`] values
+//! from core state without attaching listeners or mutating the DOM.
+
 pub mod collapsible;
 pub mod dialog;
 pub mod tabs;

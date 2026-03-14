@@ -1,8 +1,9 @@
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_arch = "wasm32")]
-use web_sys::{window, CssStyleDeclaration};
+use web_sys::{CssStyleDeclaration, window};
 
+/// Errors that can occur while applying or restoring scroll locking.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScrollLockError {
     WindowUnavailable,
@@ -11,8 +12,12 @@ pub enum ScrollLockError {
     StyleUnavailable,
 }
 
+/// Result type used by scroll lock helpers.
 pub type ScrollLockResult<T> = Result<T, ScrollLockError>;
 
+/// RAII guard returned by [`scroll_lock_acquire`].
+///
+/// Dropping the guard releases one scroll lock reference.
 #[derive(Debug)]
 pub struct ScrollLockGuard {
     active: bool,
@@ -49,6 +54,11 @@ fn scroll_lock_state() -> &'static Mutex<ScrollLockState> {
     SCROLL_LOCK_STATE.get_or_init(|| Mutex::new(ScrollLockState::default()))
 }
 
+/// Acquires a global scroll lock.
+///
+/// On wasm this snapshots body styles and fixes the body in place until all
+/// acquired guards have been released. On non-wasm targets it only updates the
+/// internal reference count so tests and host builds remain well-defined.
 pub fn scroll_lock_acquire() -> ScrollLockResult<ScrollLockGuard> {
     let mut state = scroll_lock_state()
         .lock()
@@ -60,6 +70,10 @@ pub fn scroll_lock_acquire() -> ScrollLockResult<ScrollLockGuard> {
     Ok(ScrollLockGuard { active: true })
 }
 
+/// Releases one global scroll lock reference.
+///
+/// Extra releases are ignored. When the final reference is released on wasm,
+/// the original body styles and scroll position are restored.
 pub fn scroll_lock_release() -> ScrollLockResult<()> {
     let mut state = scroll_lock_state()
         .lock()

@@ -1,7 +1,10 @@
+//! Attribute builders for tabs state.
+
 use crate::DomAttribute;
 use headless_primitives_core::orientation::Orientation;
 use headless_primitives_core::tabs::TabsModel;
 
+/// Returns container attributes for a tabs list element.
 pub fn tabs_list_attrs(orientation: Orientation) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
     attrs.push(DomAttribute::string("role", "tablist"));
@@ -14,6 +17,10 @@ pub fn tabs_list_attrs(orientation: Orientation) -> Vec<DomAttribute> {
     attrs
 }
 
+/// Returns trigger attributes for a single tab button.
+///
+/// Disabled state is derived from `model`, so callers should not layer a
+/// separate disabled flag on top of these attributes.
 pub fn tabs_trigger_attrs(
     model: &TabsModel,
     index: usize,
@@ -51,6 +58,7 @@ pub fn tabs_trigger_attrs(
     attrs
 }
 
+/// Returns panel attributes for a single tab panel.
 pub fn tabs_panel_attrs(
     model: &TabsModel,
     index: usize,
@@ -92,7 +100,10 @@ mod tests {
             .iter()
             .find(|attr| attr.name() == "data-state")
             .expect("data-state");
-        assert_eq!(state.value(), &DomAttributeValue::String("active".to_string()));
+        assert_eq!(
+            state.value(),
+            &DomAttributeValue::String("active".to_string())
+        );
     }
 
     #[test]
@@ -109,7 +120,10 @@ mod tests {
             .find(|attr| attr.name() == "tabindex")
             .expect("tabindex");
         assert_eq!(disabled.value(), &DomAttributeValue::Bool(true));
-        assert_eq!(tabindex.value(), &DomAttributeValue::String("-1".to_string()));
+        assert_eq!(
+            tabindex.value(),
+            &DomAttributeValue::String("-1".to_string())
+        );
         assert!(attrs.iter().any(|attr| attr.name() == "aria-disabled"));
     }
 

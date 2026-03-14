@@ -1,10 +1,12 @@
+//! Attribute builders for dialog state.
+
 use crate::DomAttribute;
 use headless_primitives_core::dialog::{DialogModel, DialogState};
 
-pub fn dialog_trigger_attrs(
-    model: &DialogModel,
-    controls_id: Option<&str>,
-) -> Vec<DomAttribute> {
+/// Returns trigger attributes for a dialog toggle element.
+///
+/// The optional `controls_id` is written to `aria-controls` when provided.
+pub fn dialog_trigger_attrs(model: &DialogModel, controls_id: Option<&str>) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
     let state = dialog_state_value(model.state());
     attrs.push(DomAttribute::string("data-state", state));
@@ -19,6 +21,10 @@ pub fn dialog_trigger_attrs(
     attrs
 }
 
+/// Returns content attributes for a dialog surface element.
+///
+/// The optional `labelled_by` and `described_by` IDs are written to the
+/// corresponding ARIA attributes when present.
 pub fn dialog_content_attrs(
     model: &DialogModel,
     labelled_by: Option<&str>,
@@ -62,7 +68,10 @@ mod tests {
             .iter()
             .find(|attr| attr.name() == "aria-expanded")
             .expect("aria-expanded");
-        assert_eq!(expanded.value(), &DomAttributeValue::String("true".to_string()));
+        assert_eq!(
+            expanded.value(),
+            &DomAttributeValue::String("true".to_string())
+        );
     }
 
     #[test]
