@@ -1,7 +1,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use headless_primitives_leptos::{
-    DismissibleLayer, DismissibleReason, FocusScope, Portal, modal_hide_siblings,
+    DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -69,6 +69,27 @@ fn dispatch_tab_keydown(target: &web_sys::HtmlElement, shift: bool) -> web_sys::
     event
 }
 
+fn dispatch_transition_end(target: &web_sys::HtmlElement, bubbles: bool) {
+    let init = web_sys::TransitionEventInit::new();
+    init.set_bubbles(bubbles);
+    let event =
+        web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &init.into())
+            .expect("transition event");
+    target
+        .dispatch_event(&event)
+        .expect("dispatch transitionend");
+}
+
+fn dispatch_animation_end(target: &web_sys::HtmlElement, bubbles: bool) {
+    let init = web_sys::AnimationEventInit::new();
+    init.set_bubbles(bubbles);
+    let event = web_sys::AnimationEvent::new_with_event_init_dict("animationend", &init.into())
+        .expect("animation event");
+    target
+        .dispatch_event(&event)
+        .expect("dispatch animationend");
+}
+
 fn attr(element: &web_sys::HtmlElement, name: &str) -> Option<String> {
     element.get_attribute(name)
 }
@@ -79,6 +100,14 @@ fn active_id() -> Option<String> {
 
 fn active_element() -> Option<web_sys::Element> {
     document().active_element()
+}
+
+fn html_element_by_id(id: &str) -> web_sys::HtmlElement {
+    document()
+        .get_element_by_id(id)
+        .unwrap_or_else(|| panic!("missing element: {id}"))
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("html element")
 }
 
 #[wasm_bindgen_test]
@@ -397,6 +426,130 @@ fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable()
     assert!(active_element().is_some_and(|active| {
         active.is_same_node(Some(&wrapper_element))
     }));
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_completes_exit() {
+    let host = append_div("presence-transition-host");
+    let present = RwSignal::new(true);
+    let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let exit_callbacks_handle = Arc::clone(&exit_callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exit_callbacks = Arc::clone(&exit_callbacks_handle);
+            Callback::new(move |_| {
+                exit_callbacks
+                    .lock()
+                    .expect("exit callbacks lock")
+                    .push("transition");
+            })
+        };
+
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                <div id="presence-transition-child">"Child"</div>
+            </Presence>
+        }
+    });
+
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-duration", "10s")
+        .expect("set transition duration");
+
+    present.set(false);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    assert!(host.first_element_child().is_some());
+
+    let child = html_element_by_id("presence-transition-child");
+    dispatch_transition_end(&child, true);
+    assert!(host.first_element_child().is_some());
+    assert!(
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .is_empty()
+    );
+
+    dispatch_transition_end(&root, true);
+    assert!(host.first_element_child().is_none());
+    assert_eq!(
+        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        &["transition"]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes_exit() {
+    let host = append_div("presence-animation-host");
+    let present = RwSignal::new(true);
+    let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let exit_callbacks_handle = Arc::clone(&exit_callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exit_callbacks = Arc::clone(&exit_callbacks_handle);
+            Callback::new(move |_| {
+                exit_callbacks
+                    .lock()
+                    .expect("exit callbacks lock")
+                    .push("animation");
+            })
+        };
+
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                <div id="presence-animation-child">"Child"</div>
+            </Presence>
+        }
+    });
+
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("animation-duration", "10s")
+        .expect("set animation duration");
+
+    present.set(false);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    assert!(host.first_element_child().is_some());
+
+    let child = html_element_by_id("presence-animation-child");
+    dispatch_animation_end(&child, true);
+    assert!(host.first_element_child().is_some());
+    assert!(
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .is_empty()
+    );
+
+    dispatch_animation_end(&root, true);
+    assert!(host.first_element_child().is_none());
+    assert_eq!(
+        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        &["animation"]
+    );
 
     drop(mount);
     remove_from_body(&host);
