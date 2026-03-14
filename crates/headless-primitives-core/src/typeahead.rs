@@ -1,11 +1,12 @@
 //! Low-level typeahead matching helpers.
 //!
-//! Matching is currently ASCII case-insensitive. It does not perform full
-//! Unicode case folding.
+//! Matching is Unicode-aware through standard lowercase mappings.
+//! It does not perform Unicode normalization or full case folding.
 
 /// Returns the index of the first item whose label starts with `query`.
 ///
-/// Matching is ASCII case-insensitive and returns `None` for empty queries.
+/// Matching is Unicode-aware and case-insensitive through lowercase mappings.
+/// It returns `None` for empty queries.
 pub fn typeahead_match<T>(items: &[T], query: &str, label: impl Fn(&T) -> &str) -> Option<usize> {
     if query.is_empty() {
         return None;
@@ -13,21 +14,25 @@ pub fn typeahead_match<T>(items: &[T], query: &str, label: impl Fn(&T) -> &str) 
 
     items.iter().position(|item| {
         let value = label(item);
-        starts_with_ignore_ascii_case(value, query)
+        starts_with_ignore_case(value, query)
     })
 }
 
-fn starts_with_ignore_ascii_case(value: &str, query: &str) -> bool {
-    let mut value_bytes = value.bytes();
-    for query_byte in query.bytes() {
-        let Some(value_byte) = value_bytes.next() else {
+fn starts_with_ignore_case(value: &str, query: &str) -> bool {
+    let mut value_chars = value.chars().flat_map(char::to_lowercase);
+    let mut query_chars = query.chars().flat_map(char::to_lowercase);
+
+    loop {
+        let Some(query_char) = query_chars.next() else {
+            return true;
+        };
+        let Some(value_char) = value_chars.next() else {
             return false;
         };
-        if value_byte.to_ascii_lowercase() != query_byte.to_ascii_lowercase() {
+        if value_char != query_char {
             return false;
         }
     }
-    true
 }
 
 #[cfg(test)]
@@ -46,6 +51,20 @@ mod tests {
         let items = ["Apple", "Banana"];
         let index = typeahead_match(&items, "bA", |item| item);
         assert_eq!(index, Some(1));
+    }
+
+    #[test]
+    fn typeahead_matches_non_ascii_prefixes_case_insensitively() {
+        let items = ["Ångström", "Éclair", "Banana"];
+        assert_eq!(typeahead_match(&items, "ång", |item| item), Some(0));
+        assert_eq!(typeahead_match(&items, "éC", |item| item), Some(1));
+    }
+
+    #[test]
+    fn typeahead_handles_lowercase_expansions() {
+        let items = ["İstanbul", "Izmir"];
+        let index = typeahead_match(&items, "i̇s", |item| item);
+        assert_eq!(index, Some(0));
     }
 
     #[test]
