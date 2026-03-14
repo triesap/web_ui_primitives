@@ -34,6 +34,17 @@ fn append_div(id: &str) -> web_sys::HtmlElement {
     element
 }
 
+fn append_button(id: &str) -> web_sys::HtmlElement {
+    let element = document()
+        .create_element("button")
+        .expect("create button")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("button html element");
+    element.set_id(id);
+    body().append_child(&element).expect("append button");
+    element
+}
+
 fn append_child_div(parent: &web_sys::HtmlElement, id: &str) -> web_sys::HtmlElement {
     let element = document()
         .create_element("div")
@@ -251,6 +262,121 @@ fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
             DismissibleReason::Escape,
             DismissibleReason::PointerDownOutside
         ]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_ignores_focus_moves_within_the_layer() {
+    let host = append_div("dismissible-focus-inside-host");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    focus_targets
+                        .lock()
+                        .expect("focus targets lock")
+                        .push(target_id);
+                })
+            >
+                <button id="dismissible-focus-first">"First"</button>
+                <button id="dismissible-focus-second">"Second"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let first = html_element_by_id("dismissible-focus-first");
+    let second = html_element_by_id("dismissible-focus-second");
+
+    first.focus().expect("focus first");
+    second.focus().expect("focus second");
+
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+    assert!(
+        focus_targets
+            .lock()
+            .expect("focus targets lock")
+            .is_empty()
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
+    let host = append_div("dismissible-focus-outside-host");
+    let outside = append_button("dismissible-focus-outside-target");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets_handle = Arc::clone(&focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                    let target_id = event
+                        .target()
+                        .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                        .map(|element| element.id())
+                        .unwrap_or_default();
+                    focus_targets
+                        .lock()
+                        .expect("focus targets lock")
+                        .push(target_id);
+                })
+            >
+                <button id="dismissible-focus-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-focus-inside");
+
+    inside.focus().expect("focus inside");
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+    assert!(
+        focus_targets
+            .lock()
+            .expect("focus targets lock")
+            .is_empty()
+    );
+
+    outside.focus().expect("focus outside");
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::FocusOutside]
+    );
+    assert_eq!(
+        focus_targets.lock().expect("focus targets lock").as_slice(),
+        &["dismissible-focus-outside-target".to_string()]
     );
 
     drop(mount);
