@@ -1,3 +1,5 @@
+//! Modal sibling-hiding helpers for headless overlays.
+
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
@@ -31,6 +33,7 @@ struct ModalState {
     layers: Vec<ModalLayer>,
 }
 
+/// Errors that can occur while applying modal sibling hiding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModalError {
     WindowUnavailable,
@@ -39,14 +42,27 @@ pub enum ModalError {
     AttributeUnavailable,
 }
 
+/// Result type used by modal helpers.
 pub type ModalResult<T> = Result<T, ModalError>;
 
+/// Modal root target used by [`modal_hide_siblings`].
+///
+/// On wasm this is a concrete DOM element. On non-wasm targets it becomes `()`
+/// because there is no live DOM tree to mutate.
 #[cfg(target_arch = "wasm32")]
 pub type ModalTarget = Element;
 
+/// Modal root target used by [`modal_hide_siblings`].
+///
+/// On wasm this is a concrete DOM element. On non-wasm targets it becomes `()`
+/// because there is no live DOM tree to mutate.
 #[cfg(not(target_arch = "wasm32"))]
 pub type ModalTarget = ();
 
+/// RAII guard returned by [`modal_hide_siblings`].
+///
+/// Dropping the guard restores any siblings hidden for that modal layer unless
+/// another active layer still requires them to stay hidden.
 #[derive(Debug)]
 pub struct ModalGuard {
     id: u64,
@@ -84,6 +100,13 @@ fn modal_state_with<T>(f: impl FnOnce(&mut ModalState) -> T) -> T {
     f(&mut state)
 }
 
+/// Hides siblings outside the modal branch and returns a restoration guard.
+///
+/// On wasm, this walks ancestor levels from `root` up to `body`, applying
+/// `aria-hidden` and `inert` to siblings outside the active branch.
+///
+/// On non-wasm targets, this records a logical modal layer without mutating a
+/// DOM tree so tests and host builds remain deterministic.
 pub fn modal_hide_siblings(root: &ModalTarget) -> ModalResult<ModalGuard> {
     let id = modal_state_with(|state| {
         let id = state.next_id;
@@ -95,6 +118,10 @@ pub fn modal_hide_siblings(root: &ModalTarget) -> ModalResult<ModalGuard> {
     Ok(ModalGuard { id, active: true })
 }
 
+/// Restores the hidden siblings for a modal layer id.
+///
+/// If the id is unknown, this is a no-op. On wasm, siblings are only restored
+/// when no remaining modal layer still hides them.
 pub fn modal_restore(id: u64) -> ModalResult<()> {
     modal_state_with(|state| {
         let index = state.layers.iter().position(|layer| layer.id == id);

@@ -1,3 +1,5 @@
+//! Focus management primitives for headless overlays and composites.
+
 use leptos::ev::KeyboardEvent;
 use leptos::html;
 use leptos::prelude::*;
@@ -8,10 +10,14 @@ use wasm_bindgen::JsCast;
 const FOCUSABLE_SELECTOR: &str =
     "a[href],button,textarea,input,select,[tabindex]:not([tabindex='-1'])";
 
+/// Returns the selector used to find focusable descendants in a focus scope.
 pub fn focus_scope_selector() -> &'static str {
     FOCUSABLE_SELECTOR
 }
 
+/// Returns the next focus index for a trapped tab sequence.
+///
+/// `shift = true` moves backward; otherwise it moves forward.
 pub fn focus_scope_next_index(current: usize, count: usize, shift: bool) -> usize {
     focus_scope_target_index(Some(current), count, shift)
 }
@@ -36,6 +42,16 @@ fn focus_scope_target_index(current: Option<usize>, count: usize, shift: bool) -
 }
 
 #[component]
+/// Wraps children in a focus scope with optional trapping and auto-focus.
+///
+/// On wasm, this can:
+///
+/// - auto-focus the first focusable descendant on mount
+/// - trap tab navigation within the scope
+/// - restore the previously focused element on unmount
+///
+/// On non-wasm targets, those side effects are skipped and the component
+/// renders a focusable wrapper element around `children`.
 pub fn FocusScope(
     #[prop(optional)] trapped: bool,
     #[prop(optional)] auto_focus: bool,

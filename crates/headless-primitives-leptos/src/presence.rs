@@ -1,3 +1,5 @@
+//! Presence primitive for exit-aware mounting and unmounting.
+
 use leptos::ev::{AnimationEvent, TransitionEvent};
 use leptos::html;
 use leptos::prelude::*;
@@ -5,6 +7,7 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use std::sync::Mutex;
 
+/// Lifecycle states used by [`Presence`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PresenceState {
     Mounted,
@@ -12,6 +15,7 @@ pub enum PresenceState {
     Unmounted,
 }
 
+/// Computes the next presence state from visibility and exit-completion inputs.
 pub fn presence_state_next(
     current: PresenceState,
     present: bool,
@@ -202,6 +206,13 @@ fn presence_exit_timeout_ms(root: &web_sys::Element) -> u32 {
 }
 
 #[component]
+/// Conditionally mounts content while allowing exit transitions to finish.
+///
+/// On wasm, this waits for matching `transitionend` or `animationend` events,
+/// with a computed-style timeout fallback when exit motion is present.
+///
+/// On non-wasm targets, exit timing is treated as immediate, so content
+/// unmounts as soon as `present` becomes `false`.
 pub fn Presence(
     #[prop(into)] present: Signal<bool>,
     #[prop(optional)] on_exit_complete: Option<Callback<()>>,
