@@ -1,7 +1,7 @@
 #![cfg(target_arch = "wasm32")]
 
 use headless_primitives_leptos::{
-    DismissibleLayer, DismissibleReason, Portal, modal_hide_siblings,
+    DismissibleLayer, DismissibleReason, FocusScope, Portal, modal_hide_siblings,
 };
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -57,8 +57,24 @@ fn dispatch_pointer_down(target: &web_sys::HtmlElement) {
     target.dispatch_event(&event).expect("dispatch pointerdown");
 }
 
+fn dispatch_tab_keydown(target: &web_sys::HtmlElement, shift: bool) -> web_sys::KeyboardEvent {
+    let init = web_sys::KeyboardEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(true);
+    init.set_key("Tab");
+    init.set_shift_key(shift);
+    let event = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
+        .expect("keyboard event");
+    target.dispatch_event(&event).expect("dispatch keydown");
+    event
+}
+
 fn attr(element: &web_sys::HtmlElement, name: &str) -> Option<String> {
     element.get_attribute(name)
+}
+
+fn active_id() -> Option<String> {
+    document().active_element().map(|element| element.id())
 }
 
 #[wasm_bindgen_test]
@@ -204,4 +220,83 @@ fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
     assert!(attr(&branch_sibling, "aria-hidden").is_none());
 
     remove_from_body(&shell);
+}
+
+#[wasm_bindgen_test]
+fn focus_scope_traps_tab_within_the_live_scope() {
+    let host = append_div("focus-scope-host");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <>
+                <button id="focus-before">"Before"</button>
+                <FocusScope trapped=true>
+                    <button id="focus-first">"First"</button>
+                    <button id="focus-second">"Second"</button>
+                </FocusScope>
+                <button id="focus-after">"After"</button>
+            </>
+        }
+    });
+
+    let first = document()
+        .get_element_by_id("focus-first")
+        .expect("first button")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("first html element");
+    let second = document()
+        .get_element_by_id("focus-second")
+        .expect("second button")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("second html element");
+
+    first.focus().expect("focus first");
+    assert_eq!(active_id().as_deref(), Some("focus-first"));
+
+    let first_tab = dispatch_tab_keydown(&first, false);
+    assert!(first_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-second"));
+
+    let second_tab = dispatch_tab_keydown(&second, false);
+    assert!(second_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-first"));
+    assert_ne!(active_id().as_deref(), Some("focus-after"));
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
+    let host = append_div("focus-scope-shift-host");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <>
+                <button id="focus-shift-before">"Before"</button>
+                <FocusScope trapped=true>
+                    <button id="focus-shift-first">"First"</button>
+                    <button id="focus-shift-last">"Last"</button>
+                </FocusScope>
+                <button id="focus-shift-after">"After"</button>
+            </>
+        }
+    });
+
+    let first = document()
+        .get_element_by_id("focus-shift-first")
+        .expect("first shift button")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("first shift html element");
+
+    first.focus().expect("focus first shift");
+    assert_eq!(active_id().as_deref(), Some("focus-shift-first"));
+
+    let shift_tab = dispatch_tab_keydown(&first, true);
+    assert!(shift_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-shift-last"));
+    assert_ne!(active_id().as_deref(), Some("focus-shift-before"));
+
+    drop(mount);
+    remove_from_body(&host);
 }
