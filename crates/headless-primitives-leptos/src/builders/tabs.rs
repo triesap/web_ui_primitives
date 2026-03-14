@@ -19,11 +19,11 @@ pub fn tabs_trigger_attrs(
     index: usize,
     trigger_id: Option<&str>,
     controls_id: Option<&str>,
-    disabled: bool,
 ) -> Vec<PrimitiveAttribute> {
     let mut attrs = Vec::new();
     let selected = model.selected() == Some(index);
     let focused = model.focused() == Some(index);
+    let disabled = model.disabled(index);
     attrs.push(PrimitiveAttribute::string("role", "tab"));
     attrs.push(PrimitiveAttribute::string(
         "aria-selected",
@@ -40,6 +40,7 @@ pub fn tabs_trigger_attrs(
     attrs.push(PrimitiveAttribute::bool("disabled", disabled));
     if disabled {
         attrs.push(PrimitiveAttribute::string("aria-disabled", "true"));
+        attrs.push(PrimitiveAttribute::bool("data-disabled", true));
     }
     if let Some(id) = trigger_id {
         attrs.push(PrimitiveAttribute::string("id", id));
@@ -86,7 +87,7 @@ mod tests {
     #[test]
     fn trigger_attrs_selected_state() {
         let model = TabsModel::new(2);
-        let attrs = tabs_trigger_attrs(&model, 0, None, None, false);
+        let attrs = tabs_trigger_attrs(&model, 0, None, None);
         let state = attrs
             .iter()
             .find(|attr| attr.name() == "data-state")
@@ -95,6 +96,27 @@ mod tests {
             state.value(),
             &PrimitiveAttributeValue::String("active".to_string())
         );
+    }
+
+    #[test]
+    fn trigger_attrs_reflect_model_disabled_state() {
+        let mut model = TabsModel::new(2);
+        model.set_disabled(1, true);
+        let attrs = tabs_trigger_attrs(&model, 1, None, None);
+        let disabled = attrs
+            .iter()
+            .find(|attr| attr.name() == "disabled")
+            .expect("disabled");
+        let tabindex = attrs
+            .iter()
+            .find(|attr| attr.name() == "tabindex")
+            .expect("tabindex");
+        assert_eq!(disabled.value(), &PrimitiveAttributeValue::Bool(true));
+        assert_eq!(
+            tabindex.value(),
+            &PrimitiveAttributeValue::String("-1".to_string())
+        );
+        assert!(attrs.iter().any(|attr| attr.name() == "aria-disabled"));
     }
 
     #[test]
