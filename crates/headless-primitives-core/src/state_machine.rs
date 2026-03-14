@@ -1,5 +1,11 @@
+//! Generic finite state machine helpers.
+//!
+//! This module is lower-level than the widget models in this crate and is
+//! retained for advanced composition and backward compatibility.
+
 use alloc::vec::Vec;
 
+/// Describes a transition from one state to another for a given event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transition<S, E> {
     pub from: S,
@@ -7,12 +13,14 @@ pub struct Transition<S, E> {
     pub to: S,
 }
 
+/// Result returned after a successful state transition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransitionResult<S> {
     pub previous: S,
     pub next: S,
 }
 
+/// Generic state machine with explicit transition rules.
 #[derive(Debug, Clone)]
 pub struct StateMachine<S, E> {
     state: S,
@@ -20,6 +28,7 @@ pub struct StateMachine<S, E> {
 }
 
 impl<S, E> StateMachine<S, E> {
+    /// Creates a state machine with the provided initial state.
     pub fn new(initial: S) -> Self {
         Self {
             state: initial,
@@ -27,24 +36,29 @@ impl<S, E> StateMachine<S, E> {
         }
     }
 
+    /// Returns the current state.
     pub fn state(&self) -> &S {
         &self.state
     }
 
+    /// Replaces the current state without consulting transition rules.
     pub fn set_state(&mut self, state: S) {
         self.state = state;
     }
 
+    /// Returns the configured transition rules.
     pub fn transitions(&self) -> &[Transition<S, E>] {
         &self.transitions
     }
 }
 
 impl<S: PartialEq, E: PartialEq> StateMachine<S, E> {
+    /// Adds a new transition rule.
     pub fn add_transition(&mut self, from: S, event: E, to: S) {
         self.transitions.push(Transition { from, event, to });
     }
 
+    /// Returns whether the current state can transition for `event`.
     pub fn can_transition(&self, event: &E) -> bool {
         self.transitions
             .iter()
@@ -53,10 +67,13 @@ impl<S: PartialEq, E: PartialEq> StateMachine<S, E> {
 }
 
 impl<S: PartialEq + Clone, E: PartialEq> StateMachine<S, E> {
+    /// Triggers a transition for `event`, returning the previous and next state
+    /// when a matching rule exists.
     pub fn trigger(&mut self, event: &E) -> Option<TransitionResult<S>> {
-        let transition = self.transitions.iter().find(|transition| {
-            transition.from == self.state && &transition.event == event
-        })?;
+        let transition = self
+            .transitions
+            .iter()
+            .find(|transition| transition.from == self.state && &transition.event == event)?;
 
         let previous = core::mem::replace(&mut self.state, transition.to.clone());
         Some(TransitionResult {

@@ -1,3 +1,9 @@
+//! Low-level focus index management for composite widgets.
+//!
+//! [`TabsModel`](crate::TabsModel) uses this internally, but the type remains
+//! public for advanced widgets that need roving keyboard focus behavior.
+
+/// Index-based roving focus state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RovingFocus {
     len: usize,
@@ -5,6 +11,7 @@ pub struct RovingFocus {
     looped: bool,
 }
 
+/// Orientation rules used when mapping keyboard arrows to focus actions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RovingFocusOrientation {
     Horizontal,
@@ -12,6 +19,7 @@ pub enum RovingFocusOrientation {
     Both,
 }
 
+/// Navigation actions supported by [`RovingFocus`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RovingFocusAction {
     Next,
@@ -20,6 +28,7 @@ pub enum RovingFocusAction {
     Last,
 }
 
+/// Maps a keyboard key to a roving focus action for the given orientation.
 pub fn roving_focus_action_from_key(
     key: &str,
     orientation: RovingFocusOrientation,
@@ -51,6 +60,7 @@ pub fn roving_focus_action_from_key(
     }
 }
 
+/// Returns the next focus index for a single navigation action.
 pub fn roving_focus_next_index(
     current: usize,
     count: usize,
@@ -71,10 +81,12 @@ pub fn roving_focus_next_index(
 }
 
 impl RovingFocus {
+    /// Creates a roving focus model with focus on the first item when present.
     pub fn new(len: usize) -> Self {
         Self::with_active(len, if len > 0 { Some(0) } else { None }, true)
     }
 
+    /// Creates a roving focus model with an explicit active item and loop mode.
     pub fn with_active(len: usize, active: Option<usize>, looped: bool) -> Self {
         let mut focus = Self {
             len,
@@ -85,33 +97,40 @@ impl RovingFocus {
         focus
     }
 
+    /// Returns the number of focusable slots being tracked.
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns the currently active index.
     pub fn active(&self) -> Option<usize> {
         self.active
     }
 
+    /// Returns whether focus wraps around at the edges.
     pub fn looped(&self) -> bool {
         self.looped
     }
 
+    /// Enables or disables wrap-around navigation.
     pub fn set_looped(&mut self, looped: bool) {
         self.looped = looped;
     }
 
+    /// Updates the tracked length and clamps the active index when needed.
     pub fn set_len(&mut self, len: usize) -> Option<usize> {
         self.len = len;
         self.active = self.clamp_active(self.active);
         self.active
     }
 
+    /// Sets the active index, clamping it to the valid range.
     pub fn set_active(&mut self, index: Option<usize>) -> Option<usize> {
         self.active = self.clamp_active(index);
         self.active
     }
 
+    /// Moves focus to the next item.
     pub fn move_next(&mut self) -> Option<usize> {
         let len = self.len;
         if len == 0 {
@@ -133,6 +152,7 @@ impl RovingFocus {
         next
     }
 
+    /// Moves focus to the previous item.
     pub fn move_prev(&mut self) -> Option<usize> {
         let len = self.len;
         if len == 0 {
@@ -154,6 +174,7 @@ impl RovingFocus {
         prev
     }
 
+    /// Moves focus to the first item.
     pub fn move_first(&mut self) -> Option<usize> {
         if self.len == 0 {
             self.active = None;
@@ -163,6 +184,7 @@ impl RovingFocus {
         self.active
     }
 
+    /// Moves focus to the last item.
     pub fn move_last(&mut self) -> Option<usize> {
         if self.len == 0 {
             self.active = None;
@@ -191,11 +213,8 @@ impl RovingFocus {
 #[cfg(test)]
 mod tests {
     use super::{
-        roving_focus_action_from_key,
+        RovingFocus, RovingFocusAction, RovingFocusOrientation, roving_focus_action_from_key,
         roving_focus_next_index,
-        RovingFocus,
-        RovingFocusAction,
-        RovingFocusOrientation,
     };
 
     #[test]
@@ -222,24 +241,15 @@ mod tests {
     #[test]
     fn roving_focus_action_maps_arrows() {
         assert_eq!(
-            roving_focus_action_from_key(
-                "ArrowLeft",
-                RovingFocusOrientation::Horizontal
-            ),
+            roving_focus_action_from_key("ArrowLeft", RovingFocusOrientation::Horizontal),
             Some(RovingFocusAction::Prev)
         );
         assert_eq!(
-            roving_focus_action_from_key(
-                "ArrowUp",
-                RovingFocusOrientation::Horizontal
-            ),
+            roving_focus_action_from_key("ArrowUp", RovingFocusOrientation::Horizontal),
             None
         );
         assert_eq!(
-            roving_focus_action_from_key(
-                "ArrowDown",
-                RovingFocusOrientation::Both
-            ),
+            roving_focus_action_from_key("ArrowDown", RovingFocusOrientation::Both),
             Some(RovingFocusAction::Next)
         );
     }
@@ -247,30 +257,15 @@ mod tests {
     #[test]
     fn roving_focus_next_index_respects_loop() {
         assert_eq!(
-            roving_focus_next_index(
-                0,
-                3,
-                RovingFocusAction::Prev,
-                false
-            ),
+            roving_focus_next_index(0, 3, RovingFocusAction::Prev, false),
             0
         );
         assert_eq!(
-            roving_focus_next_index(
-                0,
-                3,
-                RovingFocusAction::Prev,
-                true
-            ),
+            roving_focus_next_index(0, 3, RovingFocusAction::Prev, true),
             2
         );
         assert_eq!(
-            roving_focus_next_index(
-                2,
-                3,
-                RovingFocusAction::Next,
-                true
-            ),
+            roving_focus_next_index(2, 3, RovingFocusAction::Next, true),
             0
         );
     }

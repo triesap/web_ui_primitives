@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 readme.workspace = true
 
-description = "Headless primitives and accessibility helpers for Rust UI frameworks"
+description = "Headless interaction models and low-level utilities for Rust UI frameworks"
 keywords = ["ui", "headless", "a11y", "aria", "state-machine"]
 categories = ["gui", "accessibility"]
 

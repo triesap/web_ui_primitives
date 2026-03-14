@@ -1,8 +1,12 @@
-pub fn typeahead_match<T>(
-    items: &[T],
-    query: &str,
-    label: impl Fn(&T) -> &str,
-) -> Option<usize> {
+//! Low-level typeahead matching helpers.
+//!
+//! Matching is currently ASCII case-insensitive. It does not perform full
+//! Unicode case folding.
+
+/// Returns the index of the first item whose label starts with `query`.
+///
+/// Matching is ASCII case-insensitive and returns `None` for empty queries.
+pub fn typeahead_match<T>(items: &[T], query: &str, label: impl Fn(&T) -> &str) -> Option<usize> {
     if query.is_empty() {
         return None;
     }

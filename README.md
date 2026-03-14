@@ -10,7 +10,7 @@ Headless, accessible UI primitives for Rust web frameworks.
 
 ## Crates
 
-- `headless-primitives-core` (no_std): state machines and models (collapsible, dialog, tabs, roving focus, typeahead, ids).
+- `headless-primitives-core` (no_std): primary interaction models (`collapsible`, `dialog`, `tabs`) plus low-level utilities (`roving_focus`, `typeahead`, `ids`, `controlled`, `state_machine`).
 - `headless-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissible layer, presence, portal, modal aria-hidden, scroll lock).
 - `ui-primitives*`: compatibility shims that re-export the renamed crates during the transition.
 
