@@ -2267,6 +2267,135 @@ fn portal_mounts_children_into_the_explicit_target() {
 }
 
 #[wasm_bindgen_test]
+fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones() {
+    let host = append_div("portal-remount-host");
+    let first_target = append_div("portal-remount-first-target");
+    let second_target = append_div("portal-remount-second-target");
+    let present = RwSignal::new(true);
+    let use_first_target = RwSignal::new(true);
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            {move || {
+                present.get().then(|| {
+                    let mount = if use_first_target.get() {
+                        document()
+                            .get_element_by_id("portal-remount-first-target")
+                            .expect("first portal target")
+                    } else {
+                        document()
+                            .get_element_by_id("portal-remount-second-target")
+                            .expect("second portal target")
+                    };
+
+                    view! {
+                        <Portal mount=mount>
+                            <span>"Portaled"</span>
+                        </Portal>
+                    }
+                })
+            }}
+        }
+    });
+
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.text_content().as_deref(), Some("Portaled"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    present.set(false);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    use_first_target.set(false);
+    present.set(true);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().as_deref(), Some("Portaled"));
+    assert_eq!(second_target.child_element_count(), 1);
+
+    present.set(false);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    use_first_target.set(true);
+    present.set(true);
+    assert_eq!(first_target.text_content().as_deref(), Some("Portaled"));
+    assert_eq!(first_target.child_element_count(), 1);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    drop(mount);
+    assert_eq!(first_target.text_content().unwrap_or_default(), "");
+    assert_eq!(first_target.child_element_count(), 0);
+    assert_eq!(second_target.text_content().unwrap_or_default(), "");
+    assert_eq!(second_target.child_element_count(), 0);
+
+    remove_from_body(&host);
+    remove_from_body(&first_target);
+    remove_from_body(&second_target);
+}
+
+#[wasm_bindgen_test]
+fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
+    let host = append_div("portal-repeat-host");
+    let target = append_div("portal-repeat-target");
+    let present = RwSignal::new(true);
+    let label = RwSignal::new("First");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            {move || {
+                present.get().then(|| {
+                    let text = label.get();
+                    let mount = document()
+                        .get_element_by_id("portal-repeat-target")
+                        .expect("repeat portal target");
+                    view! {
+                        <Portal mount=mount>
+                            <span>{text}</span>
+                        </Portal>
+                    }
+                })
+            }}
+        }
+    });
+
+    assert_eq!(target.text_content().as_deref(), Some("First"));
+    assert_eq!(target.child_element_count(), 1);
+
+    present.set(false);
+    assert_eq!(target.text_content().unwrap_or_default(), "");
+    assert_eq!(target.child_element_count(), 0);
+
+    label.set("Second");
+    present.set(true);
+    assert_eq!(target.text_content().as_deref(), Some("Second"));
+    assert_eq!(target.child_element_count(), 1);
+
+    present.set(false);
+    assert_eq!(target.text_content().unwrap_or_default(), "");
+    assert_eq!(target.child_element_count(), 0);
+
+    label.set("Third");
+    present.set(true);
+    assert_eq!(target.text_content().as_deref(), Some("Third"));
+    assert_eq!(target.child_element_count(), 1);
+
+    drop(mount);
+    assert_eq!(target.text_content().unwrap_or_default(), "");
+    assert_eq!(target.child_element_count(), 0);
+
+    remove_from_body(&host);
+    remove_from_body(&target);
+}
+
+#[wasm_bindgen_test]
 fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
     let shell = append_div("modal-shell");
     let left = append_child_div(&shell, "modal-left");
