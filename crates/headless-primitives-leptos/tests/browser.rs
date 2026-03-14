@@ -58,16 +58,28 @@ fn dispatch_pointer_down(target: &web_sys::HtmlElement) {
     target.dispatch_event(&event).expect("dispatch pointerdown");
 }
 
-fn dispatch_tab_keydown(target: &web_sys::HtmlElement, shift: bool) -> web_sys::KeyboardEvent {
+fn dispatch_keydown(
+    target: &web_sys::HtmlElement,
+    key: &str,
+    shift: bool,
+) -> web_sys::KeyboardEvent {
     let init = web_sys::KeyboardEventInit::new();
     init.set_bubbles(true);
     init.set_cancelable(true);
-    init.set_key("Tab");
+    init.set_key(key);
     init.set_shift_key(shift);
     let event = web_sys::KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
         .expect("keyboard event");
     target.dispatch_event(&event).expect("dispatch keydown");
     event
+}
+
+fn dispatch_tab_keydown(target: &web_sys::HtmlElement, shift: bool) -> web_sys::KeyboardEvent {
+    dispatch_keydown(target, "Tab", shift)
+}
+
+fn dispatch_escape_keydown(target: &web_sys::HtmlElement) -> web_sys::KeyboardEvent {
+    dispatch_keydown(target, "Escape", false)
 }
 
 fn dispatch_transition_end(target: &web_sys::HtmlElement, bubbles: bool) {
@@ -156,6 +168,89 @@ fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown(
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
         &[DismissibleReason::PointerDownOutside]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
+    let host = append_div("dismissible-escape-host");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let escape_keys: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let escape_keys_handle = Arc::clone(&escape_keys);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let escape_keys = Arc::clone(&escape_keys_handle);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                    escape_keys
+                        .lock()
+                        .expect("escape keys lock")
+                        .push(event.key());
+                })
+            >
+                <button id="dismissible-escape-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-escape-inside");
+    let escape = dispatch_escape_keydown(&inside);
+
+    assert!(!escape.default_prevented());
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert_eq!(
+        escape_keys.lock().expect("escape keys lock").as_slice(),
+        &["Escape".to_string()]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
+    let host = append_div("dismissible-combined-host");
+    let outside = append_div("dismissible-combined-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+
+        view! {
+            <DismissibleLayer on_dismiss=Callback::new(move |reason| {
+                dismissals.lock().expect("dismissals lock").push(reason);
+            })>
+                <button id="dismissible-combined-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-combined-inside");
+
+    dispatch_escape_keydown(&inside);
+    dispatch_pointer_down(&outside);
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::Escape,
+            DismissibleReason::PointerDownOutside
+        ]
     );
 
     drop(mount);
