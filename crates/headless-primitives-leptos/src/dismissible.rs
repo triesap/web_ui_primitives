@@ -25,24 +25,18 @@ pub fn dismissible_is_outside(is_inside: bool) -> bool {
 /// dismissal requests.
 ///
 /// `disable_pointer_down_outside_dismiss` suppresses pointer-down-outside
-/// dismissal handling.
-///
-/// `disable_outside_pointer_events` remains available as a compatibility alias
-/// for the same behavior. Neither prop mutates CSS `pointer-events`.
+/// dismissal handling. This prop does not mutate CSS `pointer-events`.
 pub fn DismissibleLayer(
     #[prop(optional)] on_dismiss: Option<Callback<DismissibleReason>>,
     #[prop(optional)] on_escape_key_down: Option<Callback<KeyboardEvent>>,
     #[prop(optional)] on_pointer_down_outside: Option<Callback<PointerEvent>>,
     #[prop(optional)] on_focus_outside: Option<Callback<FocusEvent>>,
     #[prop(optional)] disable_pointer_down_outside_dismiss: bool,
-    #[prop(optional)] disable_outside_pointer_events: bool,
     children: ChildrenFn,
 ) -> impl IntoView {
     let node_ref = NodeRef::<html::Div>::new();
-    let disable_pointer_down_outside_dismiss = pointer_down_outside_dismiss_disabled(
-        disable_pointer_down_outside_dismiss,
-        disable_outside_pointer_events,
-    );
+    let disable_pointer_down_outside_dismiss =
+        pointer_down_outside_dismiss_disabled(disable_pointer_down_outside_dismiss);
 
     let on_keydown = move |event: KeyboardEvent| {
         if !dismissible_is_escape(&event.key()) {
@@ -151,7 +145,6 @@ pub fn DismissibleLayer(
         let _ = on_pointer_down_outside;
         let _ = on_focus_outside;
         let _ = disable_pointer_down_outside_dismiss;
-        let _ = disable_outside_pointer_events;
     }
 
     view! {
@@ -161,11 +154,8 @@ pub fn DismissibleLayer(
     }
 }
 
-fn pointer_down_outside_dismiss_disabled(
-    disable_pointer_down_outside_dismiss: bool,
-    disable_outside_pointer_events: bool,
-) -> bool {
-    disable_pointer_down_outside_dismiss || disable_outside_pointer_events
+fn pointer_down_outside_dismiss_disabled(disable_pointer_down_outside_dismiss: bool) -> bool {
+    disable_pointer_down_outside_dismiss
 }
 
 #[cfg(test)]
@@ -188,16 +178,11 @@ mod tests {
 
     #[test]
     fn canonical_pointer_down_outside_dismiss_flag_disables_behavior() {
-        assert!(pointer_down_outside_dismiss_disabled(true, false));
-    }
-
-    #[test]
-    fn legacy_pointer_event_flag_remains_a_compatibility_alias() {
-        assert!(pointer_down_outside_dismiss_disabled(false, true));
+        assert!(pointer_down_outside_dismiss_disabled(true));
     }
 
     #[test]
     fn outside_pointer_dismiss_stays_enabled_when_both_flags_are_false() {
-        assert!(!pointer_down_outside_dismiss_disabled(false, false));
+        assert!(!pointer_down_outside_dismiss_disabled(false));
     }
 }
