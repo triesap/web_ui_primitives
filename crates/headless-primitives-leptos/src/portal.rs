@@ -39,8 +39,12 @@ pub fn Portal(#[prop(optional)] mount: Option<PortalMount>, children: ChildrenFn
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_arch = "wasm32"))]
+    use super::PortalMount;
+
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn portal_availability_matches_target() {
-        assert!(!cfg!(target_arch = "wasm32"));
+    fn portal_mount_is_unit_on_host_targets() {
+        assert_eq!(core::mem::size_of::<PortalMount>(), 0);
     }
 }

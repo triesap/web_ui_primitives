@@ -21,6 +21,9 @@ wasm-bindgen = { workspace = true }
 send_wrapper = { workspace = true }
 web-sys = { workspace = true }
 
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "=0.3.58"
+
 [package.metadata.docs.rs]
 default-target = "wasm32-unknown-unknown"
 targets = ["x86_64-unknown-linux-gnu"]

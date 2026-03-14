@@ -262,17 +262,20 @@ fn modal_is_hidden_by_layers(_layers: &[ModalLayer], _element: &ModalTarget) -> 
     false
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 fn modal_layer_count_for_test() -> usize {
     modal_state_with(|state| state.layers.len())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{modal_hidden_sibling_indexes, modal_hide_siblings, modal_layer_count_for_test};
+    use super::modal_hidden_sibling_indexes;
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn modal_guard_tracks_layers() {
+        use super::{modal_hide_siblings, modal_layer_count_for_test};
+
         assert_eq!(modal_layer_count_for_test(), 0);
         let guard = modal_hide_siblings(&()).expect("guard");
         assert_eq!(modal_layer_count_for_test(), 1);
