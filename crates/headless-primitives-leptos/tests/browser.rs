@@ -3199,6 +3199,58 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
 }
 
 #[wasm_bindgen_test]
+fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once() {
+    let host = append_div("presence-immediate-host");
+    let present = RwSignal::new(true);
+    let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let exit_callbacks_handle = Arc::clone(&exit_callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exit_callbacks = Arc::clone(&exit_callbacks_handle);
+            Callback::new(move |_| {
+                exit_callbacks
+                    .lock()
+                    .expect("exit callbacks lock")
+                    .push("immediate");
+            })
+        };
+
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                <div id="presence-immediate-child">"Child"</div>
+            </Presence>
+        }
+    });
+
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-duration", "0s")
+        .expect("set transition duration");
+    root.style()
+        .set_property("animation-duration", "0s")
+        .expect("set animation duration");
+
+    present.set(false);
+
+    assert!(host.first_element_child().is_none());
+    assert_eq!(
+        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        &["immediate"]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn scroll_lock_release_restores_previous_body_styles() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
