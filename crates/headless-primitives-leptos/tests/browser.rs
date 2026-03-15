@@ -3048,6 +3048,82 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
 }
 
 #[wasm_bindgen_test]
+async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit() {
+    let host = append_div("presence-timeout-cancel-host");
+    let present = RwSignal::new(true);
+    let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let exit_callbacks_handle = Arc::clone(&exit_callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exit_callbacks = Arc::clone(&exit_callbacks_handle);
+            Callback::new(move |_| {
+                exit_callbacks
+                    .lock()
+                    .expect("exit callbacks lock")
+                    .push("timeout");
+            })
+        };
+
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                <div id="presence-timeout-cancel-child">"Child"</div>
+            </Presence>
+        }
+    });
+
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-duration", "80ms")
+        .expect("set transition duration");
+
+    present.set(false);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    assert!(host.first_element_child().is_some());
+
+    TimeoutFuture::new(20).await;
+    present.set(true);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
+    assert!(host.first_element_child().is_some());
+    assert!(
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .is_empty()
+    );
+
+    TimeoutFuture::new(100).await;
+    assert!(host.first_element_child().is_some());
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
+    assert!(
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .is_empty()
+    );
+
+    present.set(false);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    TimeoutFuture::new(120).await;
+
+    assert!(host.first_element_child().is_none());
+    assert_eq!(
+        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        &["timeout"]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 fn scroll_lock_release_restores_previous_body_styles() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
