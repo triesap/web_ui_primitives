@@ -4,6 +4,7 @@ use headless_primitives_leptos::{
     DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
     scroll_lock_acquire, scroll_lock_release,
 };
+use gloo_timers::future::TimeoutFuture;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -2981,6 +2982,65 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
     assert_eq!(
         exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
         &["animation"]
+    );
+
+    drop(mount);
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
+    let host = append_div("presence-timeout-host");
+    let present = RwSignal::new(true);
+    let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let exit_callbacks_handle = Arc::clone(&exit_callbacks);
+
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exit_callbacks = Arc::clone(&exit_callbacks_handle);
+            Callback::new(move |_| {
+                exit_callbacks
+                    .lock()
+                    .expect("exit callbacks lock")
+                    .push("timeout");
+            })
+        };
+
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                <div id="presence-timeout-child">"Child"</div>
+            </Presence>
+        }
+    });
+
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-duration", "20ms")
+        .expect("set transition duration");
+
+    present.set(false);
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    assert!(host.first_element_child().is_some());
+    assert!(
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .is_empty()
+    );
+
+    TimeoutFuture::new(60).await;
+
+    assert!(host.first_element_child().is_none());
+    assert_eq!(
+        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        &["timeout"]
     );
 
     drop(mount);
