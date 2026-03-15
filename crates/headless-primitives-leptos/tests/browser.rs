@@ -3519,3 +3519,49 @@ fn mixed_scroll_lock_release_and_guard_drop_restore_styles_after_the_final_logic
     set_body_style("top", &top_before);
     set_body_style("width", &width_before);
 }
+
+#[wasm_bindgen_test]
+fn scroll_lock_reacquire_captures_a_fresh_body_style_snapshot() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+
+    set_body_style("overflow", "hidden");
+    set_body_style("position", "relative");
+    set_body_style("top", "4px");
+    set_body_style("width", "70%");
+
+    let first_guard = scroll_lock_acquire().expect("acquire first scroll lock");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+
+    drop(first_guard);
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "relative");
+    assert_eq!(body_style("top"), "4px");
+    assert_eq!(body_style("width"), "70%");
+
+    set_body_style("overflow", "visible");
+    set_body_style("position", "absolute");
+    set_body_style("top", "14px");
+    set_body_style("width", "45%");
+
+    let second_guard = scroll_lock_acquire().expect("acquire second scroll lock");
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+
+    drop(second_guard);
+
+    assert_eq!(body_style("overflow"), "visible");
+    assert_eq!(body_style("position"), "absolute");
+    assert_eq!(body_style("top"), "14px");
+    assert_eq!(body_style("width"), "45%");
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
+}
