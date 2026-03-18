@@ -14,10 +14,11 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 fn document() -> web_sys::Document {
-    web_sys::window()
-        .expect("window")
-        .document()
-        .expect("document")
+    window().document().expect("document")
+}
+
+fn window() -> web_sys::Window {
+    web_sys::window().expect("window")
 }
 
 fn body() -> web_sys::HtmlElement {
@@ -147,6 +148,10 @@ fn set_body_style(name: &str, value: &str) {
         .style()
         .set_property(name, value)
         .unwrap_or_else(|_| panic!("set body style: {name}"));
+}
+
+fn scroll_y() -> f64 {
+    window().scroll_y().expect("read scroll y")
 }
 
 #[wasm_bindgen_test]
@@ -3643,4 +3648,61 @@ fn scroll_lock_restores_the_original_snapshot_after_mid_lock_style_mutation() {
     set_body_style("position", &position_before);
     set_body_style("top", &top_before);
     set_body_style("width", &width_before);
+}
+
+#[wasm_bindgen_test]
+async fn scroll_lock_restores_the_captured_scroll_position_on_final_unlock() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+    let scroll_before = scroll_y();
+
+    let spacer = append_div("scroll-lock-scroll-spacer");
+    spacer
+        .style()
+        .set_property("height", "4000px")
+        .expect("set spacer height");
+    spacer
+        .style()
+        .set_property("width", "1px")
+        .expect("set spacer width");
+
+    set_body_style("overflow", "auto");
+    set_body_style("position", "relative");
+    set_body_style("top", "13px");
+    set_body_style("width", "64%");
+
+    window().scroll_to_with_x_and_y(0.0, 240.0);
+    TimeoutFuture::new(20).await;
+
+    let captured_scroll = scroll_y();
+    assert!(captured_scroll >= 200.0, "captured scroll: {captured_scroll}");
+
+    let guard = scroll_lock_acquire().expect("acquire scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_eq!(body_style("top"), format!("-{}px", captured_scroll));
+
+    window().scroll_to_with_x_and_y(0.0, 0.0);
+    TimeoutFuture::new(20).await;
+
+    drop(guard);
+    TimeoutFuture::new(20).await;
+
+    assert_eq!(body_style("overflow"), "auto");
+    assert_eq!(body_style("position"), "relative");
+    assert_eq!(body_style("top"), "13px");
+    assert_eq!(body_style("width"), "64%");
+    assert!((scroll_y() - captured_scroll).abs() < 1.0);
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
+    window().scroll_to_with_x_and_y(0.0, scroll_before);
+    TimeoutFuture::new(20).await;
+    remove_from_body(&spacer);
 }
