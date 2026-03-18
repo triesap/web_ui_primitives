@@ -3787,3 +3787,74 @@ async fn scroll_lock_reacquire_captures_a_fresh_scroll_snapshot() {
     TimeoutFuture::new(20).await;
     remove_from_body(&spacer);
 }
+
+#[wasm_bindgen_test]
+async fn nested_scroll_lock_keeps_the_outer_scroll_snapshot_until_final_unlock() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+    let scroll_before = scroll_y();
+
+    let spacer = append_div("nested-scroll-lock-scroll-spacer");
+    spacer
+        .style()
+        .set_property("height", "5000px")
+        .expect("set spacer height");
+    spacer
+        .style()
+        .set_property("width", "1px")
+        .expect("set spacer width");
+
+    set_body_style("overflow", "auto");
+    set_body_style("position", "relative");
+    set_body_style("top", "15px");
+    set_body_style("width", "54%");
+
+    window().scroll_to_with_x_and_y(0.0, 260.0);
+    TimeoutFuture::new(20).await;
+    let outer_scroll = scroll_y();
+    assert!(outer_scroll >= 220.0, "outer scroll: {outer_scroll}");
+
+    let outer_guard = scroll_lock_acquire().expect("acquire outer scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_eq!(body_style("top"), format!("-{}px", outer_scroll));
+
+    window().scroll_to_with_x_and_y(0.0, 0.0);
+    TimeoutFuture::new(20).await;
+
+    let inner_guard = scroll_lock_acquire().expect("acquire inner scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_eq!(body_style("top"), format!("-{}px", outer_scroll));
+
+    drop(inner_guard);
+    TimeoutFuture::new(20).await;
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_eq!(body_style("top"), format!("-{}px", outer_scroll));
+
+    drop(outer_guard);
+    TimeoutFuture::new(20).await;
+
+    assert_eq!(body_style("overflow"), "auto");
+    assert_eq!(body_style("position"), "relative");
+    assert_eq!(body_style("top"), "15px");
+    assert_eq!(body_style("width"), "54%");
+    assert!((scroll_y() - outer_scroll).abs() < 1.0);
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
+    window().scroll_to_with_x_and_y(0.0, scroll_before);
+    TimeoutFuture::new(20).await;
+    remove_from_body(&spacer);
+}
