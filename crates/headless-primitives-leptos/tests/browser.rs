@@ -3706,3 +3706,84 @@ async fn scroll_lock_restores_the_captured_scroll_position_on_final_unlock() {
     TimeoutFuture::new(20).await;
     remove_from_body(&spacer);
 }
+
+#[wasm_bindgen_test]
+async fn scroll_lock_reacquire_captures_a_fresh_scroll_snapshot() {
+    let overflow_before = body_style("overflow");
+    let position_before = body_style("position");
+    let top_before = body_style("top");
+    let width_before = body_style("width");
+    let scroll_before = scroll_y();
+
+    let spacer = append_div("scroll-lock-reacquire-scroll-spacer");
+    spacer
+        .style()
+        .set_property("height", "5000px")
+        .expect("set spacer height");
+    spacer
+        .style()
+        .set_property("width", "1px")
+        .expect("set spacer width");
+
+    set_body_style("overflow", "auto");
+    set_body_style("position", "relative");
+    set_body_style("top", "10px");
+    set_body_style("width", "58%");
+
+    window().scroll_to_with_x_and_y(0.0, 180.0);
+    TimeoutFuture::new(20).await;
+    let first_scroll = scroll_y();
+    assert!(first_scroll >= 150.0, "first scroll: {first_scroll}");
+
+    let first_guard = scroll_lock_acquire().expect("acquire first scroll lock");
+    assert_eq!(body_style("top"), format!("-{}px", first_scroll));
+
+    drop(first_guard);
+    TimeoutFuture::new(20).await;
+
+    assert_eq!(body_style("overflow"), "auto");
+    assert_eq!(body_style("position"), "relative");
+    assert_eq!(body_style("top"), "10px");
+    assert_eq!(body_style("width"), "58%");
+    assert!((scroll_y() - first_scroll).abs() < 1.0);
+
+    set_body_style("overflow", "scroll");
+    set_body_style("position", "absolute");
+    set_body_style("top", "17px");
+    set_body_style("width", "46%");
+
+    window().scroll_to_with_x_and_y(0.0, 420.0);
+    TimeoutFuture::new(20).await;
+    let second_scroll = scroll_y();
+    assert!(
+        second_scroll >= first_scroll + 150.0,
+        "second scroll: {second_scroll}, first scroll: {first_scroll}"
+    );
+
+    let second_guard = scroll_lock_acquire().expect("acquire second scroll lock");
+
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+    assert_eq!(body_style("width"), "100%");
+    assert_eq!(body_style("top"), format!("-{}px", second_scroll));
+
+    window().scroll_to_with_x_and_y(0.0, 0.0);
+    TimeoutFuture::new(20).await;
+
+    drop(second_guard);
+    TimeoutFuture::new(20).await;
+
+    assert_eq!(body_style("overflow"), "scroll");
+    assert_eq!(body_style("position"), "absolute");
+    assert_eq!(body_style("top"), "17px");
+    assert_eq!(body_style("width"), "46%");
+    assert!((scroll_y() - second_scroll).abs() < 1.0);
+
+    set_body_style("overflow", &overflow_before);
+    set_body_style("position", &position_before);
+    set_body_style("top", &top_before);
+    set_body_style("width", &width_before);
+    window().scroll_to_with_x_and_y(0.0, scroll_before);
+    TimeoutFuture::new(20).await;
+    remove_from_body(&spacer);
+}
