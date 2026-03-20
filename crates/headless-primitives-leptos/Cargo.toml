@@ -23,7 +23,7 @@ web-sys = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 gloo-timers = { workspace = true }
-wasm-bindgen-test = "=0.3.58"
+wasm-bindgen-test = "=0.3.64"
 
 [package.metadata.docs.rs]
 default-target = "wasm32-unknown-unknown"

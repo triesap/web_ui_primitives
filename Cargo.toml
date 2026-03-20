@@ -19,11 +19,11 @@ rust-version = "1.92.0"
 unsafe_code = "forbid"
 
 [workspace.dependencies]
-leptos = { version = "0.8.16", default-features = false }
-wasm-bindgen = "=0.2.108"
+leptos = { version = "0.8.17", default-features = false }
+wasm-bindgen = "=0.2.114"
 send_wrapper = "0.6"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
-web-sys = { version = "0.3.77", features = [
+web-sys = { version = "0.3.91", features = [
   "Document",
   "AnimationEvent",
   "AnimationEventInit",
