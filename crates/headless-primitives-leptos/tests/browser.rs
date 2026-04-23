@@ -1,10 +1,10 @@
 #![cfg(target_arch = "wasm32")]
 
+use gloo_timers::future::TimeoutFuture;
 use headless_primitives_leptos::{
     DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
     scroll_lock_acquire, scroll_lock_release,
 };
-use gloo_timers::future::TimeoutFuture;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -98,9 +98,8 @@ fn dispatch_escape_keydown(target: &web_sys::HtmlElement) -> web_sys::KeyboardEv
 fn dispatch_transition_end(target: &web_sys::HtmlElement, bubbles: bool) {
     let init = web_sys::TransitionEventInit::new();
     init.set_bubbles(bubbles);
-    let event =
-        web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &init.into())
-            .expect("transition event");
+    let event = web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &init.into())
+        .expect("transition event");
     target
         .dispatch_event(&event)
         .expect("dispatch transitionend");
@@ -317,12 +316,7 @@ fn dismissible_layer_ignores_focus_moves_within_the_layer() {
     second.focus().expect("focus second");
 
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
-    assert!(
-        focus_targets
-            .lock()
-            .expect("focus targets lock")
-            .is_empty()
-    );
+    assert!(focus_targets.lock().expect("focus targets lock").is_empty());
 
     drop(mount);
     remove_from_body(&host);
@@ -367,12 +361,7 @@ fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
 
     inside.focus().expect("focus inside");
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
-    assert!(
-        focus_targets
-            .lock()
-            .expect("focus targets lock")
-            .is_empty()
-    );
+    assert!(focus_targets.lock().expect("focus targets lock").is_empty());
 
     outside.focus().expect("focus outside");
 
@@ -646,7 +635,12 @@ fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
         dismissals.lock().expect("dismissals lock").as_slice(),
         &[DismissibleReason::FocusOutside, DismissibleReason::Escape]
     );
-    assert!(pointer_targets.lock().expect("pointer targets lock").is_empty());
+    assert!(
+        pointer_targets
+            .lock()
+            .expect("pointer targets lock")
+            .is_empty()
+    );
     assert_eq!(
         focus_targets.lock().expect("focus targets lock").as_slice(),
         &["dismissible-callback-focus-outside".to_string()]
@@ -700,18 +694,34 @@ fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_laye
 
     dispatch_pointer_down(&outer_only);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::PointerDownOutside]
     );
 
     inner.focus().expect("focus inner");
     outer_only.focus().expect("focus outer only");
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::FocusOutside
@@ -758,9 +768,17 @@ fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
     let inner = html_element_by_id("dismissible-stack-escape-inner");
     dispatch_escape_keydown(&inner);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
 
@@ -816,9 +834,17 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
 
     dispatch_pointer_down(&outer);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::PointerDownOutside]
     );
     assert!(
@@ -829,21 +855,30 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
 
     dispatch_pointer_down(&outside);
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[DismissibleReason::PointerDownOutside]
     );
 
     outer.focus().expect("focus outer");
     outside.focus().expect("focus outside");
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::FocusOutside
         ]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::PointerDownOutside]
     );
 
@@ -898,9 +933,17 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     let inner = html_element_by_id("dismissible-stack-restore-escape-inner");
     dispatch_escape_keydown(&inner);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
     assert!(
@@ -914,11 +957,17 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     dispatch_escape_keydown(&outer);
 
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
 
@@ -927,8 +976,8 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
 }
 
 #[wasm_bindgen_test]
-fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmost_pointer_dismiss_is_disabled(
-) {
+fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmost_pointer_dismiss_is_disabled()
+ {
     let host = append_div("dismissible-stack-suppressed-pointer-host");
     let outside = append_div("dismissible-stack-suppressed-pointer-outside");
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -1000,8 +1049,18 @@ fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmo
 
     dispatch_pointer_down(&outside);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
-    assert!(inner_dismissals.lock().expect("inner dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
+    assert!(
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .is_empty()
+    );
     assert!(
         outer_pointer_targets
             .lock()
@@ -1116,7 +1175,12 @@ fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppres
     inner.focus().expect("restore focus inner");
     dispatch_escape_keydown(&inner);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert!(
         outer_focus_targets
             .lock()
@@ -1130,7 +1194,10 @@ fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppres
             .is_empty()
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::FocusOutside, DismissibleReason::Escape]
     );
     assert_eq!(
@@ -1221,9 +1288,17 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
     inner.focus().expect("focus inner");
     outside.focus().expect("focus outside");
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::FocusOutside]
     );
     assert!(
@@ -1238,7 +1313,10 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
     outside.focus().expect("restore focus outside");
 
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::FocusOutside
@@ -1252,7 +1330,10 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
         &["dismissible-stack-suppressed-restore-outside".to_string()]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::FocusOutside]
     );
 
@@ -1310,9 +1391,17 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
     let inner = html_element_by_id("dismissible-stack-suppressed-restore-escape-inner");
     dispatch_escape_keydown(&inner);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
     assert!(
@@ -1326,11 +1415,17 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
     dispatch_escape_keydown(&outer);
 
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
 
@@ -1440,7 +1535,12 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     outer.focus().expect("focus outer");
     dispatch_pointer_down(&outside);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert!(
         outer_focus_targets
             .lock()
@@ -1448,7 +1548,10 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
             .is_empty()
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::FocusOutside,
             DismissibleReason::PointerDownOutside
@@ -1474,7 +1577,10 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     outside.focus().expect("focus outside");
 
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::FocusOutside
@@ -1488,7 +1594,10 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
         &["dismissible-nonlifo-doc-outside".to_string()]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::FocusOutside,
             DismissibleReason::PointerDownOutside
@@ -1562,9 +1671,17 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     let inner = html_element_by_id("dismissible-nonlifo-escape-inner");
     dispatch_escape_keydown(&inner);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
 
@@ -1580,11 +1697,17 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     dispatch_escape_keydown(&outer);
 
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape]
     );
 
@@ -1662,11 +1785,17 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() 
         dispatch_pointer_down(&outer);
 
         assert_eq!(
-            inner_dismissals.lock().expect("inner dismissals lock").len(),
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .len(),
             cycle + 1
         );
         assert_eq!(
-            outer_dismissals.lock().expect("outer dismissals lock").len(),
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .len(),
             cycle * 2
         );
         assert!(
@@ -1681,14 +1810,20 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() 
     }
 
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::PointerDownOutside
         ]
     );
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[
             DismissibleReason::PointerDownOutside,
             DismissibleReason::FocusOutside,
@@ -1764,11 +1899,17 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
         dispatch_escape_keydown(&inner);
 
         assert_eq!(
-            inner_dismissals.lock().expect("inner dismissals lock").len(),
+            inner_dismissals
+                .lock()
+                .expect("inner dismissals lock")
+                .len(),
             cycle + 1
         );
         assert_eq!(
-            outer_dismissals.lock().expect("outer dismissals lock").len(),
+            outer_dismissals
+                .lock()
+                .expect("outer dismissals lock")
+                .len(),
             cycle
         );
         assert!(
@@ -1783,11 +1924,17 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
     }
 
     assert_eq!(
-        inner_dismissals.lock().expect("inner dismissals lock").as_slice(),
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape, DismissibleReason::Escape]
     );
     assert_eq!(
-        outer_dismissals.lock().expect("outer dismissals lock").as_slice(),
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .as_slice(),
         &[DismissibleReason::Escape, DismissibleReason::Escape]
     );
 
@@ -1920,8 +2067,18 @@ fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
     dispatch_pointer_down(&outside);
     outside.focus().expect("focus outside after teardown");
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
-    assert!(inner_dismissals.lock().expect("inner dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
+    assert!(
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .is_empty()
+    );
     assert!(
         outer_pointer_targets
             .lock()
@@ -2032,8 +2189,18 @@ fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
 
     dispatch_escape_keydown(&outside);
 
-    assert!(outer_dismissals.lock().expect("outer dismissals lock").is_empty());
-    assert!(inner_dismissals.lock().expect("inner dismissals lock").is_empty());
+    assert!(
+        outer_dismissals
+            .lock()
+            .expect("outer dismissals lock")
+            .is_empty()
+    );
+    assert!(
+        inner_dismissals
+            .lock()
+            .expect("inner dismissals lock")
+            .is_empty()
+    );
     assert!(
         outer_escape_keys
             .lock()
@@ -2221,10 +2388,7 @@ fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
         let inner = html_element_by_id("dismissible-remount-escape-inner");
         dispatch_escape_keydown(&inner);
 
-        assert_eq!(
-            dismissals.lock().expect("dismissals lock").len(),
-            cycle + 1
-        );
+        assert_eq!(dismissals.lock().expect("dismissals lock").len(), cycle + 1);
         assert_eq!(
             escape_keys.lock().expect("escape keys lock").len(),
             cycle + 1
@@ -2633,7 +2797,10 @@ fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
     assert!(left.has_attribute("inert"));
     assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
     assert!(right.has_attribute("inert"));
-    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(
+        attr(&branch_sibling, "aria-hidden").as_deref(),
+        Some("true")
+    );
     assert!(branch_sibling.has_attribute("inert"));
 
     assert!(attr(&shell, "aria-hidden").is_none());
@@ -2669,7 +2836,10 @@ fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
     let outer_guard = modal_hide_siblings(&outer_root_element).expect("outer modal guard");
     assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("true"));
     assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
-    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(
+        attr(&branch_sibling, "aria-hidden").as_deref(),
+        Some("true")
+    );
     assert!(attr(&inner_sibling, "aria-hidden").is_none());
 
     let inner_guard = modal_hide_siblings(&inner_root_element).expect("inner modal guard");
@@ -2680,7 +2850,10 @@ fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
 
     assert_eq!(attr(&left, "aria-hidden").as_deref(), Some("true"));
     assert_eq!(attr(&right, "aria-hidden").as_deref(), Some("true"));
-    assert_eq!(attr(&branch_sibling, "aria-hidden").as_deref(), Some("true"));
+    assert_eq!(
+        attr(&branch_sibling, "aria-hidden").as_deref(),
+        Some("true")
+    );
     assert!(attr(&inner_sibling, "aria-hidden").is_none());
     assert!(!inner_sibling.has_attribute("inert"));
 
@@ -2861,9 +3034,7 @@ fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable()
     let wrapper_element: web_sys::Element = wrapper.clone().into();
 
     assert_eq!(wrapper.tab_index(), -1);
-    assert!(active_element().is_some_and(|active| {
-        active.is_same_node(Some(&wrapper_element))
-    }));
+    assert!(active_element().is_some_and(|active| { active.is_same_node(Some(&wrapper_element)) }));
 
     drop(mount);
     remove_from_body(&host);
@@ -2923,7 +3094,10 @@ fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_complet
     dispatch_transition_end(&root, true);
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["transition"]
     );
 
@@ -2985,7 +3159,10 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
     dispatch_animation_end(&root, true);
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["animation"]
     );
 
@@ -3044,7 +3221,10 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["timeout"]
     );
 
@@ -3120,7 +3300,10 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["timeout"]
     );
 
@@ -3195,7 +3378,10 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["transition"]
     );
 
@@ -3270,7 +3456,10 @@ fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["animation"]
     );
 
@@ -3322,7 +3511,10 @@ fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["immediate"]
     );
 
@@ -3400,7 +3592,10 @@ async fn presence_timeout_fallback_waits_for_the_longest_computed_exit_path() {
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
-        exit_callbacks.lock().expect("exit callbacks lock").as_slice(),
+        exit_callbacks
+            .lock()
+            .expect("exit callbacks lock")
+            .as_slice(),
         &["longest"]
     );
 
@@ -3677,7 +3872,10 @@ async fn scroll_lock_restores_the_captured_scroll_position_on_final_unlock() {
     TimeoutFuture::new(20).await;
 
     let captured_scroll = scroll_y();
-    assert!(captured_scroll >= 200.0, "captured scroll: {captured_scroll}");
+    assert!(
+        captured_scroll >= 200.0,
+        "captured scroll: {captured_scroll}"
+    );
 
     let guard = scroll_lock_acquire().expect("acquire scroll lock");
 
