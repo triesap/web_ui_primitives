@@ -88,4 +88,4 @@ See `CONTRIBUTING.md`.
 
 ## License
 
-Unlicense — see `LICENSE`.
+MIT OR Apache-2.0. See `LICENSE-MIT` and `LICENSE-APACHE`.

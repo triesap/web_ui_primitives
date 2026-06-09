@@ -9,7 +9,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-license = "Unlicense"
+license = "MIT OR Apache-2.0"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 readme = "README.md"
 repository = "https://github.com/triesap/web_ui_primitives"

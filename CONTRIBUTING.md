@@ -55,4 +55,4 @@ If behavior changes affect keyboard interaction or focus, include tests.
 ## License
 
 By contributing, you agree that your contributions are released under the
-project license (Unlicense).
+project license (MIT OR Apache-2.0).
