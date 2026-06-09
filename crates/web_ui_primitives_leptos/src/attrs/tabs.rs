@@ -1,8 +1,8 @@
 //! Attribute helpers for tabs state.
 
 use crate::DomAttribute;
-use headless_primitives_core::orientation::Orientation;
-use headless_primitives_core::tabs::TabsModel;
+use web_ui_primitives_core::orientation::Orientation;
+use web_ui_primitives_core::tabs::TabsModel;
 
 /// Returns container attributes for a tabs list element.
 pub fn tabs_list_attrs(orientation: Orientation) -> Vec<DomAttribute> {
@@ -83,8 +83,8 @@ pub fn tabs_panel_attrs(
 mod tests {
     use super::{tabs_list_attrs, tabs_panel_attrs, tabs_trigger_attrs};
     use crate::DomAttributeValue;
-    use headless_primitives_core::orientation::Orientation;
-    use headless_primitives_core::tabs::TabsModel;
+    use web_ui_primitives_core::orientation::Orientation;
+    use web_ui_primitives_core::tabs::TabsModel;
 
     #[test]
     fn list_attrs_include_orientation_for_vertical() {

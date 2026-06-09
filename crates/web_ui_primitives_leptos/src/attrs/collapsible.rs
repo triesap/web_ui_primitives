@@ -1,5 +1,5 @@
 use crate::DomAttribute;
-use headless_primitives_core::collapsible::{CollapsibleModel, CollapsibleState};
+use web_ui_primitives_core::collapsible::{CollapsibleModel, CollapsibleState};
 
 /// Returns trigger attributes for a collapsible toggle element.
 pub fn collapsible_trigger_attrs(
@@ -49,7 +49,7 @@ fn collapsible_state_value(state: CollapsibleState) -> &'static str {
 mod tests {
     use super::{collapsible_content_attrs, collapsible_trigger_attrs};
     use crate::DomAttributeValue;
-    use headless_primitives_core::collapsible::CollapsibleModel;
+    use web_ui_primitives_core::collapsible::CollapsibleModel;
 
     #[test]
     fn trigger_attrs_include_state_and_controls() {

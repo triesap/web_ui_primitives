@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/headless-primitives",
-    "crates/headless-primitives-core",
-    "crates/headless-primitives-leptos",
+    "crates/web_ui_primitives",
+    "crates/web_ui_primitives_core",
+    "crates/web_ui_primitives_leptos",
 ]
 
 [workspace.package]
@@ -12,7 +12,7 @@ edition = "2024"
 license = "Unlicense"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 readme = "README.md"
-repository = "https://github.com/triesap/headless-primitives"
+repository = "https://github.com/triesap/web_ui_primitives"
 rust-version = "1.92.0"
 
 [workspace.lints.rust]

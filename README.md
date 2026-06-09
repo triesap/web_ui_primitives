@@ -1,4 +1,4 @@
-# headless-primitives
+# web_ui_primitives
 
 Headless, accessible UI primitives for Rust web frameworks.
 
@@ -10,8 +10,8 @@ Headless, accessible UI primitives for Rust web frameworks.
 
 ## Crates
 
-- `headless-primitives-core` (no_std): primary interaction models (`collapsible`, `dialog`, `tabs`) plus low-level interaction utilities (`roving_focus`, `typeahead`).
-- `headless-primitives-leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissible layer, presence, portal, modal aria-hidden, scroll lock).
+- `web_ui_primitives_core` (no_std): primary interaction models (`collapsible`, `dialog`, `tabs`) plus low-level interaction utilities (`roving_focus`, `typeahead`).
+- `web_ui_primitives_leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissible layer, presence, portal, modal aria-hidden, scroll lock).
 
 ## How it works
 
@@ -23,7 +23,7 @@ Use the umbrella crate when you want one dependency with feature-gated adapters:
 
 ```toml
 [dependencies]
-headless-primitives = { version = "0.1.0", features = ["leptos"] }
+web_ui_primitives = { version = "0.1.0", features = ["leptos"] }
 leptos = { version = "0.8.16", features = ["csr"] }
 ```
 
@@ -31,8 +31,8 @@ Use the adapter crate directly when you want explicit control over the dependenc
 
 ```toml
 [dependencies]
-headless-primitives-core = "0.1.0"
-headless-primitives-leptos = "0.1.0"
+web_ui_primitives_core = "0.1.0"
+web_ui_primitives_leptos = "0.1.0"
 leptos = { version = "0.8.16", features = ["csr"] }
 ```
 
@@ -41,8 +41,8 @@ Example (Leptos):
 ```rust
 use leptos::html;
 use leptos::prelude::*;
-use headless_primitives::core::collapsible::CollapsibleModel;
-use headless_primitives::leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
+use web_ui_primitives::core::collapsible::CollapsibleModel;
+use web_ui_primitives::leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
 
 let model = RwSignal::new(CollapsibleModel::new(false));
 let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), Some("details")));
@@ -58,18 +58,18 @@ view! {
 ## Features
 
 - `core` (default): core interaction models and low-level interaction utilities
-- `leptos`: Leptos bindings (depends on `headless-primitives-core`)
+- `leptos`: Leptos bindings (depends on `web_ui_primitives_core`)
 
 ## Browser testing
 
 Browser-only Leptos behavior is covered in
-`crates/headless-primitives-leptos/tests/browser.rs`.
+`crates/web_ui_primitives_leptos/tests/browser.rs`.
 
 `cargo test` compiles that test target on host builds, but it only executes in
 a browser runtime. Run the browser harness with:
 
 ```bash
-wasm-pack test --headless --chrome crates/headless-primitives-leptos
+wasm-pack test --headless --chrome crates/web_ui_primitives_leptos
 ```
 
 If ChromeDriver needs explicit browser capabilities, use

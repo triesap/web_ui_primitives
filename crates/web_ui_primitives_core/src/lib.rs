@@ -1,4 +1,4 @@
-//! Core interaction models for `headless-primitives`.
+//! Core interaction models for `web_ui_primitives`.
 //!
 //! Most consumers should start with the widget-level models re-exported at the
 //! crate root:
@@ -13,7 +13,7 @@
 //! consumers.
 //!
 //! ```rust
-//! use headless_primitives_core::{TabsActivation, TabsModel};
+//! use web_ui_primitives_core::{TabsActivation, TabsModel};
 //!
 //! let mut tabs = TabsModel::with_activation(3, TabsActivation::Manual);
 //! assert_eq!(tabs.selected(), Some(0));

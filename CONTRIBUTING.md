@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to headless-primitives.
+Thanks for your interest in contributing to web_ui_primitives.
 
 ## Ways to help
 
@@ -15,14 +15,14 @@ This repository is a Rust workspace. Typical tasks:
 
 - `cargo fmt`
 - `cargo test`
-- `wasm-pack test --headless --chrome crates/headless-primitives-leptos`
+- `wasm-pack test --headless --chrome crates/web_ui_primitives_leptos`
 
 ## Browser tests
 
 Browser-targeted Leptos tests live in
-`crates/headless-primitives-leptos/tests/browser.rs`.
+`crates/web_ui_primitives_leptos/tests/browser.rs`.
 
-Use the `wasm-pack test --headless --chrome crates/headless-primitives-leptos`
+Use the `wasm-pack test --headless --chrome crates/web_ui_primitives_leptos`
 command when you change dismissible, portal, focus, modal, presence, or other
 browser-only behavior.
 

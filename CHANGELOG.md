@@ -7,4 +7,4 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-- rename the crate family to headless-primitives.
+- rename the crate family to web_ui_primitives.

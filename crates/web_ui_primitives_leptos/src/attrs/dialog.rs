@@ -1,7 +1,7 @@
 //! Attribute helpers for dialog state.
 
 use crate::DomAttribute;
-use headless_primitives_core::dialog::{DialogModel, DialogState};
+use web_ui_primitives_core::dialog::{DialogModel, DialogState};
 
 /// Returns trigger attributes for a dialog toggle element.
 ///
@@ -58,7 +58,7 @@ fn dialog_state_value(state: DialogState) -> &'static str {
 mod tests {
     use super::{dialog_content_attrs, dialog_trigger_attrs};
     use crate::DomAttributeValue;
-    use headless_primitives_core::dialog::DialogModel;
+    use web_ui_primitives_core::dialog::DialogModel;
 
     #[test]
     fn trigger_attrs_reflect_open() {

@@ -1,15 +1,15 @@
 #![cfg(target_arch = "wasm32")]
 
 use gloo_timers::future::TimeoutFuture;
-use headless_primitives_leptos::{
-    DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
-    scroll_lock_acquire, scroll_lock_release,
-};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
+use web_ui_primitives_leptos::{
+    DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
+    scroll_lock_acquire, scroll_lock_release,
+};
 
 wasm_bindgen_test_configure!(run_in_browser);
 

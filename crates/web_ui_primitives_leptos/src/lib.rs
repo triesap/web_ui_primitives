@@ -1,4 +1,4 @@
-//! Leptos bindings for `headless-primitives`.
+//! Leptos bindings for `web_ui_primitives`.
 //!
 //! The crate exposes two layers:
 //!
@@ -9,8 +9,8 @@
 //! The DOM binding surface uses `Dom*` and `Dismissible*` terminology.
 //!
 //! ```rust,no_run
-//! use headless_primitives_core::collapsible::CollapsibleModel;
-//! use headless_primitives_leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
+//! use web_ui_primitives_core::collapsible::CollapsibleModel;
+//! use web_ui_primitives_leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
 //! use leptos::html;
 //! use leptos::prelude::*;
 //!

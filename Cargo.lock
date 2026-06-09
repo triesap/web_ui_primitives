@@ -571,31 +571,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 
 [[package]]
-name = "headless-primitives"
-version = "0.1.0"
-dependencies = [
- "headless-primitives-core",
- "headless-primitives-leptos",
-]
-
-[[package]]
-name = "headless-primitives-core"
-version = "0.1.0"
-
-[[package]]
-name = "headless-primitives-leptos"
-version = "0.1.0"
-dependencies = [
- "gloo-timers",
- "headless-primitives-core",
- "leptos",
- "send_wrapper",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
-]
-
-[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1950,6 +1925,31 @@ checksum = "854ba17bb104abfb26ba36da9729addc7ce7f06f5c0f90f3c391f8461cca21f9"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "web_ui_primitives"
+version = "0.1.0"
+dependencies = [
+ "web_ui_primitives_core",
+ "web_ui_primitives_leptos",
+]
+
+[[package]]
+name = "web_ui_primitives_core"
+version = "0.1.0"
+
+[[package]]
+name = "web_ui_primitives_leptos"
+version = "0.1.0"
+dependencies = [
+ "gloo-timers",
+ "leptos",
+ "send_wrapper",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
+ "web_ui_primitives_core",
 ]
 
 [[package]]
