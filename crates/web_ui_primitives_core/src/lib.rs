@@ -48,6 +48,7 @@ pub use collapsible::{CollapsibleModel, CollapsibleState};
 pub use dialog::{DialogModel, DialogState};
 pub use orientation::{Direction, Orientation};
 pub use tabs::{TabsActivation, TabsLoop, TabsModel};
+pub use typeahead::{Typeahead, TypeaheadKeyResult};
 
 #[cfg(test)]
 extern crate std;
