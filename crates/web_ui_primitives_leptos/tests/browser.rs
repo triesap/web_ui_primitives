@@ -8,9 +8,10 @@ use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 use web_ui_primitives_leptos::{
-    DismissibleLayer, DismissibleLayerOptions, DismissibleReason, FocusScope, FocusScopeOptions,
-    Portal, Presence, modal_hide_siblings, scroll_lock_acquire, scroll_lock_release,
-    use_dismissible_layer, use_focus_scope, use_presence,
+    DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent, DismissibleLayer,
+    DismissibleLayerOptions, DismissiblePointerDownOutsideEvent, DismissibleReason, FocusScope,
+    FocusScopeOptions, Portal, Presence, modal_hide_siblings, scroll_lock_acquire,
+    scroll_lock_release, use_dismissible_layer, use_focus_scope, use_presence,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -68,13 +69,15 @@ fn remove_from_body(element: &web_sys::HtmlElement) {
     body().remove_child(element).expect("remove element");
 }
 
-fn dispatch_pointer_down(target: &web_sys::HtmlElement) {
+fn dispatch_pointer_down(target: &web_sys::HtmlElement) -> web_sys::PointerEvent {
     let init = web_sys::PointerEventInit::new();
     init.set_bubbles(true);
+    init.set_cancelable(true);
     init.set_composed(true);
     let event = web_sys::PointerEvent::new_with_event_init_dict("pointerdown", &init)
         .expect("pointer event");
     target.dispatch_event(&event).expect("dispatch pointerdown");
+    event
 }
 
 fn dispatch_keydown(
@@ -218,6 +221,139 @@ async fn dismissible_layer_binding_attaches_to_the_target_element_without_a_wrap
 }
 
 #[wasm_bindgen_test]
+async fn dismissible_layer_cancellable_events_can_prevent_dismissal() {
+    let host = append_div("dismissible-cancel-host");
+    let outside = append_button("dismissible-cancel-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let handled: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_handled = Arc::clone(&handled);
+    let focus_handled = Arc::clone(&handled);
+    let escape_handled = Arc::clone(&handled);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_handled = Arc::clone(&pointer_handled);
+        let focus_handled = Arc::clone(&focus_handled);
+        let escape_handled = Arc::clone(&escape_handled);
+
+        view! {
+            <DismissibleLayer
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+                on_pointer_down_outside=Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
+                    event.prevent_default();
+                    pointer_handled
+                        .lock()
+                        .expect("pointer handled lock")
+                        .push("pointer");
+                })
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
+                    event.prevent_default();
+                    focus_handled
+                        .lock()
+                        .expect("focus handled lock")
+                        .push("focus");
+                })
+                on_escape_key_down=Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
+                    event.prevent_default();
+                    escape_handled
+                        .lock()
+                        .expect("escape handled lock")
+                        .push("escape");
+                })
+            >
+                <button id="dismissible-cancel-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-cancel-inside");
+    inside.focus().expect("focus inside");
+    render_tick().await;
+
+    let pointer = dispatch_pointer_down(&outside);
+    render_tick().await;
+    outside.focus().expect("focus outside");
+    render_tick().await;
+    let escape = dispatch_escape_keydown(&inside);
+    render_tick().await;
+
+    assert!(pointer.default_prevented());
+    assert!(escape.default_prevented());
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+    assert_eq!(
+        handled.lock().expect("handled lock").as_slice(),
+        &["pointer", "focus", "escape"]
+    );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+async fn dismissible_layer_branches_are_treated_as_inside_the_layer() {
+    let host = append_div("dismissible-branch-host");
+    let branch = append_button("dismissible-branch-target");
+    let outside = append_button("dismissible-branch-outside");
+    let branch_element: web_sys::Element = branch.clone().into();
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let branch_element = branch_element.clone();
+
+        view! {
+            <DismissibleLayer
+                branches=vec![branch_element]
+                on_dismiss=Callback::new(move |reason| {
+                    dismissals.lock().expect("dismissals lock").push(reason);
+                })
+            >
+                <button id="dismissible-branch-inside">"Inside"</button>
+            </DismissibleLayer>
+        }
+    });
+
+    let inside = html_element_by_id("dismissible-branch-inside");
+    inside.focus().expect("focus inside");
+    render_tick().await;
+
+    dispatch_pointer_down(&branch);
+    render_tick().await;
+    branch.focus().expect("focus branch");
+    render_tick().await;
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+
+    dispatch_escape_keydown(&branch);
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+
+    dispatch_pointer_down(&outside);
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::Escape,
+            DismissibleReason::PointerDownOutside
+        ]
+    );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&branch);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
 async fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown() {
     let host = append_div("dismissible-host");
     let outside = append_div("dismissible-outside");
@@ -275,11 +411,11 @@ async fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                on_escape_key_down=Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
                     escape_keys
                         .lock()
                         .expect("escape keys lock")
-                        .push(event.key());
+                        .push(event.event().key());
                 })
             >
                 <button id="dismissible-escape-inside">"Inside"</button>
@@ -363,9 +499,9 @@ async fn dismissible_layer_ignores_focus_moves_within_the_layer() {
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -415,9 +551,9 @@ async fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -476,9 +612,9 @@ async fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                on_pointer_down_outside=Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -530,9 +666,9 @@ async fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_di
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -597,9 +733,9 @@ async fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                on_pointer_down_outside=Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -608,9 +744,9 @@ async fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
                         .expect("pointer targets lock")
                         .push(target_id);
                 })
-                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -619,11 +755,11 @@ async fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
                         .expect("focus targets lock")
                         .push(target_id);
                 })
-                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                on_escape_key_down=Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
                     escape_keys
                         .lock()
                         .expect("escape keys lock")
-                        .push(event.key());
+                        .push(event.event().key());
                 })
             >
                 <button id="dismissible-callback-pointer-inside">"Inside"</button>
@@ -678,9 +814,9 @@ async fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() 
                 on_dismiss=Callback::new(move |reason| {
                     dismissals.lock().expect("dismissals lock").push(reason);
                 })
-                on_pointer_down_outside=Callback::new(move |event: leptos::ev::PointerEvent| {
+                on_pointer_down_outside=Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -689,9 +825,9 @@ async fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() 
                         .expect("pointer targets lock")
                         .push(target_id);
                 })
-                on_focus_outside=Callback::new(move |event: leptos::ev::FocusEvent| {
+                on_focus_outside=Callback::new(move |event: DismissibleFocusOutsideEvent| {
                     let target_id = event
-                        .target()
+                        .event().target()
                         .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                         .map(|element| element.id())
                         .unwrap_or_default();
@@ -700,11 +836,11 @@ async fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() 
                         .expect("focus targets lock")
                         .push(target_id);
                 })
-                on_escape_key_down=Callback::new(move |event: leptos::ev::KeyboardEvent| {
+                on_escape_key_down=Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
                     escape_keys
                         .lock()
                         .expect("escape keys lock")
-                        .push(event.key());
+                        .push(event.event().key());
                 })
             >
                 <button id="dismissible-callback-focus-inside">"Inside"</button>
@@ -1115,8 +1251,9 @@ async fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when
                 .push(reason);
         });
         let outer_on_pointer_down_outside =
-            Callback::new(move |event: leptos::ev::PointerEvent| {
+            Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                 let target_id = event
+                    .event()
                     .target()
                     .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                     .map(|element| element.id())
@@ -1127,8 +1264,9 @@ async fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when
                     .push(target_id);
             });
         let inner_on_pointer_down_outside =
-            Callback::new(move |event: leptos::ev::PointerEvent| {
+            Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                 let target_id = event
+                    .event()
                     .target()
                     .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                     .map(|element| element.id())
@@ -1225,8 +1363,9 @@ async fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_s
                 .expect("inner dismissals lock")
                 .push(reason);
         });
-        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let outer_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -1236,8 +1375,9 @@ async fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_s
                 .expect("outer focus targets lock")
                 .push(target_id);
         });
-        let inner_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let inner_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -1247,18 +1387,20 @@ async fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_s
                 .expect("inner focus targets lock")
                 .push(target_id);
         });
-        let outer_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
-            outer_escape_keys
-                .lock()
-                .expect("outer escape keys lock")
-                .push(event.key());
-        });
-        let inner_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
-            inner_escape_keys
-                .lock()
-                .expect("inner escape keys lock")
-                .push(event.key());
-        });
+        let outer_on_escape_key_down =
+            Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
+                outer_escape_keys
+                    .lock()
+                    .expect("outer escape keys lock")
+                    .push(event.event().key());
+            });
+        let inner_on_escape_key_down =
+            Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
+                inner_escape_keys
+                    .lock()
+                    .expect("inner escape keys lock")
+                    .push(event.event().key());
+            });
 
         view! {
             <DismissibleLayer
@@ -1365,8 +1507,9 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_a
                 .push(reason);
             inner_present.set(false);
         });
-        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let outer_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -1591,8 +1734,9 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_an
                 .expect("inner dismissals lock")
                 .push(reason);
         });
-        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let outer_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -1602,8 +1746,9 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_an
                 .expect("outer focus targets lock")
                 .push(target_id);
         });
-        let inner_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let inner_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -1885,8 +2030,9 @@ async fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_t
                 .push(reason);
             inner_present.set(false);
         });
-        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let outer_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -2132,8 +2278,9 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
                 .push(reason);
         });
         let outer_on_pointer_down_outside =
-            Callback::new(move |event: leptos::ev::PointerEvent| {
+            Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                 let target_id = event
+                    .event()
                     .target()
                     .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                     .map(|element| element.id())
@@ -2144,8 +2291,9 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
                     .push(target_id);
             });
         let inner_on_pointer_down_outside =
-            Callback::new(move |event: leptos::ev::PointerEvent| {
+            Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
                 let target_id = event
+                    .event()
                     .target()
                     .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                     .map(|element| element.id())
@@ -2155,8 +2303,9 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
                     .expect("inner pointer targets lock")
                     .push(target_id);
             });
-        let outer_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let outer_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -2166,8 +2315,9 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
                 .expect("outer focus targets lock")
                 .push(target_id);
         });
-        let inner_on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
+        let inner_on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -2296,18 +2446,20 @@ async fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
                 .expect("inner dismissals lock")
                 .push(reason);
         });
-        let outer_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
-            outer_escape_keys
-                .lock()
-                .expect("outer escape keys lock")
-                .push(event.key());
-        });
-        let inner_on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
-            inner_escape_keys
-                .lock()
-                .expect("inner escape keys lock")
-                .push(event.key());
-        });
+        let outer_on_escape_key_down =
+            Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
+                outer_escape_keys
+                    .lock()
+                    .expect("outer escape keys lock")
+                    .push(event.event().key());
+            });
+        let inner_on_escape_key_down =
+            Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
+                inner_escape_keys
+                    .lock()
+                    .expect("inner escape keys lock")
+                    .push(event.event().key());
+            });
 
         view! {
             {move || {
@@ -2397,19 +2549,22 @@ async fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_an
         let on_dismiss = Callback::new(move |reason| {
             dismissals.lock().expect("dismissals lock").push(reason);
         });
-        let on_pointer_down_outside = Callback::new(move |event: leptos::ev::PointerEvent| {
+        let on_pointer_down_outside =
+            Callback::new(move |event: DismissiblePointerDownOutsideEvent| {
+                let target_id = event
+                    .event()
+                    .target()
+                    .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                    .map(|element| element.id())
+                    .unwrap_or_default();
+                pointer_targets
+                    .lock()
+                    .expect("pointer targets lock")
+                    .push(target_id);
+            });
+        let on_focus_outside = Callback::new(move |event: DismissibleFocusOutsideEvent| {
             let target_id = event
-                .target()
-                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
-                .map(|element| element.id())
-                .unwrap_or_default();
-            pointer_targets
-                .lock()
-                .expect("pointer targets lock")
-                .push(target_id);
-        });
-        let on_focus_outside = Callback::new(move |event: leptos::ev::FocusEvent| {
-            let target_id = event
+                .event()
                 .target()
                 .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
                 .map(|element| element.id())
@@ -2520,11 +2675,11 @@ async fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount()
         let on_dismiss = Callback::new(move |reason| {
             dismissals.lock().expect("dismissals lock").push(reason);
         });
-        let on_escape_key_down = Callback::new(move |event: leptos::ev::KeyboardEvent| {
+        let on_escape_key_down = Callback::new(move |event: DismissibleEscapeKeyDownEvent| {
             escape_keys
                 .lock()
                 .expect("escape keys lock")
-                .push(event.key());
+                .push(event.event().key());
         });
 
         view! {

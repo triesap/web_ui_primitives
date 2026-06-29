@@ -1,5 +1,9 @@
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use leptos::ev::{FocusEvent, KeyboardEvent, PointerEvent};
 use leptos::html;
@@ -23,14 +27,83 @@ pub fn dismissible_is_outside(is_inside: bool) -> bool {
     !is_inside
 }
 
+#[cfg(target_arch = "wasm32")]
+/// Branch root that should be treated as inside a dismissible layer.
+pub type DismissibleBranch = web_sys::Element;
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Branch root that should be treated as inside a dismissible layer.
+pub type DismissibleBranch = ();
+
+#[derive(Clone)]
+/// Cancellable dismissible interaction event.
+pub struct DismissibleEvent<E> {
+    event: E,
+    default_prevented: Arc<AtomicBool>,
+}
+
+impl<E> DismissibleEvent<E> {
+    /// Creates a dismissible event from a DOM event.
+    pub fn new(event: E) -> Self {
+        Self {
+            event,
+            default_prevented: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Returns the underlying DOM event.
+    pub fn event(&self) -> &E {
+        &self.event
+    }
+
+    /// Returns `true` when dismissing default behavior has been prevented.
+    pub fn default_prevented(&self) -> bool {
+        self.default_prevented.load(Ordering::SeqCst)
+    }
+}
+
+impl DismissibleEvent<PointerEvent> {
+    /// Prevents the dismissible default action and the underlying DOM default.
+    pub fn prevent_default(&self) {
+        self.event.prevent_default();
+        self.default_prevented.store(true, Ordering::SeqCst);
+    }
+}
+
+impl DismissibleEvent<FocusEvent> {
+    /// Prevents the dismissible default action and the underlying DOM default.
+    pub fn prevent_default(&self) {
+        self.event.prevent_default();
+        self.default_prevented.store(true, Ordering::SeqCst);
+    }
+}
+
+impl DismissibleEvent<KeyboardEvent> {
+    /// Prevents the dismissible default action and the underlying DOM default.
+    pub fn prevent_default(&self) {
+        self.event.prevent_default();
+        self.default_prevented.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Cancellable pointer-down-outside event.
+pub type DismissiblePointerDownOutsideEvent = DismissibleEvent<PointerEvent>;
+
+/// Cancellable focus-outside event.
+pub type DismissibleFocusOutsideEvent = DismissibleEvent<FocusEvent>;
+
+/// Cancellable escape-key event.
+pub type DismissibleEscapeKeyDownEvent = DismissibleEvent<KeyboardEvent>;
+
 #[derive(Clone, Default)]
 /// Options for [`use_dismissible_layer`].
 pub struct DismissibleLayerOptions {
     pub on_dismiss: Option<Callback<DismissibleReason>>,
-    pub on_escape_key_down: Option<Callback<KeyboardEvent>>,
-    pub on_pointer_down_outside: Option<Callback<PointerEvent>>,
-    pub on_focus_outside: Option<Callback<FocusEvent>>,
+    pub on_escape_key_down: Option<Callback<DismissibleEscapeKeyDownEvent>>,
+    pub on_pointer_down_outside: Option<Callback<DismissiblePointerDownOutsideEvent>>,
+    pub on_focus_outside: Option<Callback<DismissibleFocusOutsideEvent>>,
     pub disable_pointer_down_outside_dismiss: bool,
+    pub branches: Vec<DismissibleBranch>,
 }
 
 #[derive(Clone)]
@@ -122,10 +195,11 @@ where
 /// dismissal handling. This prop does not mutate CSS `pointer-events`.
 pub fn DismissibleLayer(
     #[prop(optional)] on_dismiss: Option<Callback<DismissibleReason>>,
-    #[prop(optional)] on_escape_key_down: Option<Callback<KeyboardEvent>>,
-    #[prop(optional)] on_pointer_down_outside: Option<Callback<PointerEvent>>,
-    #[prop(optional)] on_focus_outside: Option<Callback<FocusEvent>>,
+    #[prop(optional)] on_escape_key_down: Option<Callback<DismissibleEscapeKeyDownEvent>>,
+    #[prop(optional)] on_pointer_down_outside: Option<Callback<DismissiblePointerDownOutsideEvent>>,
+    #[prop(optional)] on_focus_outside: Option<Callback<DismissibleFocusOutsideEvent>>,
     #[prop(optional)] disable_pointer_down_outside_dismiss: bool,
+    #[prop(optional)] branches: Vec<DismissibleBranch>,
     children: ChildrenFn,
 ) -> impl IntoView {
     let layer = use_dismissible_layer::<html::Div>(DismissibleLayerOptions {
@@ -134,6 +208,7 @@ pub fn DismissibleLayer(
         on_pointer_down_outside,
         on_focus_outside,
         disable_pointer_down_outside_dismiss,
+        branches,
     });
 
     view! {
@@ -157,21 +232,30 @@ where
     let disable_pointer_down_outside_dismiss =
         pointer_down_outside_dismiss_disabled(options.disable_pointer_down_outside_dismiss);
     let document = web_sys::window().and_then(|window| window.document());
+    let branches = options.branches;
 
     if let Some(document) = document {
         if !disable_pointer_down_outside_dismiss {
             let on_dismiss = options.on_dismiss.clone();
             let on_pointer_down_outside = options.on_pointer_down_outside.clone();
             let pointer_node_ref = node_ref;
+            let pointer_branches = branches.clone();
             let handler = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
                 if !dismissible_layer_is_topmost(layer_id) {
                     return;
                 }
-                let is_inside =
-                    dismissible_event_target_is_inside(event.target(), pointer_node_ref);
+                let is_inside = dismissible_event_target_is_inside(
+                    event.target(),
+                    pointer_node_ref,
+                    &pointer_branches,
+                );
                 if dismissible_is_outside(is_inside) {
+                    let outside_event = DismissibleEvent::new(event.clone());
                     if let Some(callback) = on_pointer_down_outside.as_ref() {
-                        callback.run(event.clone());
+                        callback.run(outside_event.clone());
+                    }
+                    if outside_event.default_prevented() || event.default_prevented() {
+                        return;
                     }
                     if let Some(callback) = on_dismiss.as_ref() {
                         callback.run(DismissibleReason::PointerDownOutside);
@@ -195,14 +279,20 @@ where
         let on_dismiss = options.on_dismiss.clone();
         let on_focus_outside = options.on_focus_outside.clone();
         let focus_node_ref = node_ref;
+        let focus_branches = branches.clone();
         let focus_handler = Closure::wrap(Box::new(move |event: web_sys::FocusEvent| {
             if !dismissible_layer_is_topmost(layer_id) {
                 return;
             }
-            let is_inside = dismissible_event_target_is_inside(event.target(), focus_node_ref);
+            let is_inside =
+                dismissible_event_target_is_inside(event.target(), focus_node_ref, &focus_branches);
             if dismissible_is_outside(is_inside) {
+                let outside_event = DismissibleEvent::new(event.clone());
                 if let Some(callback) = on_focus_outside.as_ref() {
-                    callback.run(event.clone());
+                    callback.run(outside_event.clone());
+                }
+                if outside_event.default_prevented() || event.default_prevented() {
+                    return;
                 }
                 if let Some(callback) = on_dismiss.as_ref() {
                     callback.run(DismissibleReason::FocusOutside);
@@ -223,18 +313,23 @@ where
         let on_dismiss = options.on_dismiss;
         let on_escape_key_down = options.on_escape_key_down;
         let key_node_ref = node_ref;
+        let key_branches = branches;
         let key_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
             if !dismissible_layer_is_topmost(layer_id) {
                 return;
             }
-            if !dismissible_event_target_is_inside(event.target(), key_node_ref) {
+            if !dismissible_event_target_is_inside(event.target(), key_node_ref, &key_branches) {
                 return;
             }
             if !dismissible_is_escape(&event.key()) {
                 return;
             }
+            let escape_event = DismissibleEvent::new(event.clone());
             if let Some(callback) = on_escape_key_down.as_ref() {
-                callback.run(event.clone());
+                callback.run(escape_event.clone());
+            }
+            if escape_event.default_prevented() || event.default_prevented() {
+                return;
             }
             if let Some(callback) = on_dismiss.as_ref() {
                 callback.run(DismissibleReason::Escape);
@@ -261,6 +356,7 @@ where
 fn dismissible_event_target_is_inside<E>(
     target: Option<web_sys::EventTarget>,
     node_ref: NodeRef<E>,
+    branches: &[DismissibleBranch],
 ) -> bool
 where
     E: html::ElementType,
@@ -273,10 +369,16 @@ where
         .get_untracked()
         .and_then(|root| root.dyn_into::<web_sys::Node>().ok());
 
-    target
+    let Some(target) = target.as_ref() else {
+        return false;
+    };
+    if root
         .as_ref()
-        .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
-        .unwrap_or(false)
+        .is_some_and(|root| root.contains(Some(target)))
+    {
+        return true;
+    }
+    branches.iter().any(|branch| branch.contains(Some(target)))
 }
 
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]

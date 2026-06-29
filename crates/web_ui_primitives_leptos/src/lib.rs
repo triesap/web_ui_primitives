@@ -37,7 +37,9 @@ mod presence;
 mod scroll_lock;
 
 pub use dismissible::{
-    DismissibleLayer, DismissibleLayerBinding, DismissibleLayerOptions, DismissibleReason,
+    DismissibleBranch, DismissibleEscapeKeyDownEvent, DismissibleEvent,
+    DismissibleFocusOutsideEvent, DismissibleLayer, DismissibleLayerBinding,
+    DismissibleLayerOptions, DismissiblePointerDownOutsideEvent, DismissibleReason,
     dismissible_is_escape, dismissible_is_outside, use_dismissible_layer,
 };
 pub use dom_bindings::{
