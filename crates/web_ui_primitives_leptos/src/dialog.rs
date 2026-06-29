@@ -128,6 +128,7 @@ where
     let _ = use_focus_scope_with_node_ref(
         node_ref,
         FocusScopeOptions {
+            active: Some(open),
             trapped: options.modal,
             auto_focus: true,
             return_focus: true,
@@ -138,6 +139,7 @@ where
     let _ = use_dismissible_layer_with_node_ref(
         node_ref,
         DismissibleLayerOptions {
+            active: Some(open),
             on_dismiss,
             on_escape_key_down: options.on_escape_key_down,
             on_pointer_down_outside: options.on_pointer_down_outside,
@@ -182,6 +184,7 @@ where
     let _ = use_focus_scope_with_node_ref(
         node_ref,
         FocusScopeOptions {
+            active: Some(open),
             trapped: options.modal,
             auto_focus: true,
             return_focus: true,
@@ -192,6 +195,7 @@ where
     let _ = use_dismissible_layer_with_node_ref(
         node_ref,
         DismissibleLayerOptions {
+            active: Some(open),
             on_dismiss,
             on_escape_key_down: options.on_escape_key_down,
             on_pointer_down_outside: options.on_pointer_down_outside,

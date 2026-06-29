@@ -5,6 +5,8 @@ use leptos::html;
 use leptos::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
+use std::sync::{Arc, Mutex};
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
 
 const FOCUSABLE_SELECTOR: &str =
@@ -29,6 +31,7 @@ pub fn focus_scope_next_index(current: usize, count: usize, shift: bool) -> usiz
 #[derive(Clone, Default)]
 /// Options for [`use_focus_scope`].
 pub struct FocusScopeOptions {
+    pub active: Option<Signal<bool>>,
     pub trapped: bool,
     pub auto_focus: bool,
     pub return_focus: bool,
@@ -142,6 +145,7 @@ pub fn FocusScope(
     children: ChildrenFn,
 ) -> impl IntoView {
     let scope = use_focus_scope::<html::Div>(FocusScopeOptions {
+        active: None,
         trapped,
         auto_focus,
         return_focus,
@@ -173,18 +177,17 @@ where
     use wasm_bindgen::closure::Closure;
 
     let document = web_sys::window().and_then(|window| window.document());
-    let previous_focus = document
-        .as_ref()
-        .and_then(|document| document.active_element())
-        .map(SendWrapper::new);
-    let mounted = RwSignal::new(false);
+    let previous_focus = Arc::new(Mutex::new(None::<SendWrapper<web_sys::Element>>));
+    let focused = RwSignal::new(false);
     let FocusScopeOptions {
+        active,
         trapped,
         auto_focus,
         return_focus,
         on_mount_auto_focus,
         on_unmount_auto_focus,
     } = options;
+    let active = active.unwrap_or_else(|| Signal::derive(|| true));
 
     if trapped {
         if let Some(document) = document.clone() {
@@ -224,22 +227,51 @@ where
         }
     }
 
+    let effect_previous_focus = Arc::clone(&previous_focus);
+    let effect_on_unmount_auto_focus = on_unmount_auto_focus.clone();
     let effect = RenderEffect::new(move |_| {
-        if mounted.get() {
+        if !active.get() {
+            if focused.get_untracked() {
+                if return_focus {
+                    if let Some(element) = effect_previous_focus
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .take()
+                    {
+                        let element = element.take();
+                        let _ = element
+                            .dyn_ref::<web_sys::HtmlElement>()
+                            .map(|el| el.focus());
+                    }
+                    if let Some(callback) = effect_on_unmount_auto_focus.as_ref() {
+                        callback.run(());
+                    }
+                }
+                focused.set(false);
+            }
+            return;
+        }
+        if focused.get_untracked() {
             return;
         }
         let Some(document) = document.clone() else {
-            mounted.set(true);
             return;
         };
         let Some(root) = node_ref.get() else {
             return;
         };
         let Ok(root) = root.dyn_into::<web_sys::Element>() else {
-            mounted.set(true);
+            focused.set(true);
             return;
         };
+        if !root.is_connected() {
+            return;
+        }
         let _ = root.set_attribute(FOCUS_SCOPE_ATTR, "");
+        *effect_previous_focus
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+            document.active_element().map(SendWrapper::new);
 
         if auto_focus {
             let _ = focus_scope_focus_first(&root, &document);
@@ -248,13 +280,18 @@ where
             }
         }
 
-        mounted.set(true);
+        focused.set(true);
     });
 
+    let cleanup_previous_focus = Arc::clone(&previous_focus);
     on_cleanup(move || {
         drop(effect);
-        if return_focus {
-            if let Some(element) = previous_focus {
+        if return_focus && focused.get_untracked() {
+            if let Some(element) = cleanup_previous_focus
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take()
+            {
                 let element = element.take();
                 let _ = element
                     .dyn_ref::<web_sys::HtmlElement>()

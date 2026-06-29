@@ -192,6 +192,98 @@ fn browser_dialog_layer(
     }
 }
 
+fn browser_readiness_dialog_surface(
+    node_ref: NodeRef<html::Div>,
+    open: Signal<bool>,
+    transition_end: Callback<leptos::ev::TransitionEvent>,
+    animation_end: Callback<leptos::ev::AnimationEvent>,
+) -> impl IntoView {
+    view! {
+        <div
+            id="dialog-readiness-root"
+            node_ref=node_ref
+            role="dialog"
+            aria-label="Readiness dialog"
+            tabindex="-1"
+            data-state=move || if open.get() { "open" } else { "closed" }
+            style="transition-duration: 10ms;"
+            on:transitionend=move |event| transition_end.run(event)
+            on:animationend=move |event| animation_end.run(event)
+        >
+            <button id="dialog-readiness-first">"First"</button>
+            <button id="dialog-readiness-second">"Second"</button>
+        </div>
+    }
+}
+
+fn browser_readiness_dialog_layer(
+    open: RwSignal<bool>,
+    branch: web_sys::Element,
+    dismissals: Arc<Mutex<Vec<DismissibleReason>>>,
+    pointer_targets: Arc<Mutex<Vec<String>>>,
+    focus_targets: Arc<Mutex<Vec<String>>>,
+) -> impl IntoView {
+    let open_signal = Signal::derive(move || open.get());
+    let data_state_open = open_signal;
+    let mut options = DialogLayerOptions::new(open_signal);
+    options.branches = vec![branch];
+    options.on_dismiss = Some(Callback::new(move |reason| {
+        dismissals.lock().expect("dismissals lock").push(reason);
+        open.set(false);
+    }));
+    options.on_pointer_down_outside = Some(Callback::new(
+        move |event: DismissiblePointerDownOutsideEvent| {
+            let target_id = event
+                .event()
+                .target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+                .map(|element| element.id())
+                .unwrap_or_default();
+            pointer_targets
+                .lock()
+                .expect("pointer targets lock")
+                .push(target_id);
+        },
+    ));
+    options.on_focus_outside = Some(Callback::new(move |event: DismissibleFocusOutsideEvent| {
+        let target_id = event
+            .event()
+            .target()
+            .and_then(|target| target.dyn_into::<web_sys::Element>().ok())
+            .map(|element| element.id())
+            .unwrap_or_default();
+        focus_targets
+            .lock()
+            .expect("focus targets lock")
+            .push(target_id);
+    }));
+    let dialog = use_dialog_layer::<html::Div>(options);
+
+    view! {
+        {move || -> AnyView {
+            if !dialog.is_rendered() {
+                ().into_any()
+            } else {
+                let node_ref = dialog.node_ref();
+                let transition_end = dialog.transition_end_handler();
+                let animation_end = dialog.animation_end_handler();
+
+                view! {
+                    <Portal>
+                        {move || browser_readiness_dialog_surface(
+                            node_ref,
+                            data_state_open,
+                            transition_end,
+                            animation_end,
+                        )}
+                    </Portal>
+                }
+                .into_any()
+            }
+        }}
+    }
+}
+
 #[wasm_bindgen_test]
 async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() {
     let host = append_div("dialog-layer-host");
@@ -250,6 +342,168 @@ async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() 
     render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presence() {
+    let host = append_div("dialog-readiness-host");
+    let branch = append_button("dialog-readiness-branch");
+    let outside = append_button("dialog-readiness-outside");
+    let return_target = append_button("dialog-readiness-return");
+    let original_overflow = body_style("overflow");
+    let original_position = body_style("position");
+    let open = RwSignal::new(false);
+    let layer_mounted = RwSignal::new(false);
+    let branch_element: web_sys::Element = branch.clone().into();
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let pointer_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let focus_targets: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+    let pointer_targets_handle = Arc::clone(&pointer_targets);
+    let focus_targets_handle = Arc::clone(&focus_targets);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let pointer_targets = Arc::clone(&pointer_targets_handle);
+        let focus_targets = Arc::clone(&focus_targets_handle);
+        let branch_element = branch_element.clone();
+
+        view! {
+            <button id="dialog-readiness-trigger">"Open"</button>
+            {move || -> AnyView {
+                if layer_mounted.get() {
+                    browser_readiness_dialog_layer(
+                        open,
+                        branch_element.clone(),
+                        Arc::clone(&dismissals),
+                        Arc::clone(&pointer_targets),
+                        Arc::clone(&focus_targets),
+                    )
+                    .into_any()
+                } else {
+                    ().into_any()
+                }
+            }}
+        }
+    });
+
+    render_tick().await;
+    return_target.focus().expect("focus return target");
+    layer_mounted.set(true);
+    render_tick().await;
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+
+    let root = html_element_by_id("dialog-readiness-root");
+    let first = html_element_by_id("dialog-readiness-first");
+    assert_eq!(active_id().as_deref(), Some("dialog-readiness-first"));
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
+    assert_eq!(attr(&outside, "aria-hidden").as_deref(), Some("true"));
+    assert!(outside.has_attribute("inert"));
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+
+    let tab = dispatch_tab_keydown(&first, false);
+    render_tick().await;
+    assert!(tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("dialog-readiness-second"));
+
+    dispatch_pointer_down(&branch);
+    render_tick().await;
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+
+    dispatch_pointer_down(&outside);
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+    assert_eq!(
+        pointer_targets
+            .lock()
+            .expect("pointer targets lock")
+            .as_slice(),
+        &["dialog-readiness-outside".to_string()]
+    );
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    assert!(
+        document()
+            .get_element_by_id("dialog-readiness-root")
+            .is_some()
+    );
+    assert_eq!(attr(&outside, "aria-hidden"), None);
+    assert!(!outside.has_attribute("inert"));
+    assert_eq!(body_style("overflow"), original_overflow);
+    assert_eq!(body_style("position"), original_position);
+
+    TimeoutFuture::new(30).await;
+    render_tick().await;
+    assert!(
+        document()
+            .get_element_by_id("dialog-readiness-root")
+            .is_none()
+    );
+    render_tick().await;
+    assert_eq!(active_id().as_deref(), Some("dialog-readiness-return"));
+
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+    assert_eq!(active_id().as_deref(), Some("dialog-readiness-first"));
+    outside.focus().expect("focus outside");
+    render_tick().await;
+    let root = html_element_by_id("dialog-readiness-root");
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside
+        ]
+    );
+    assert_eq!(
+        focus_targets.lock().expect("focus targets lock").as_slice(),
+        &["dialog-readiness-outside".to_string()]
+    );
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    TimeoutFuture::new(30).await;
+    render_tick().await;
+    assert!(
+        document()
+            .get_element_by_id("dialog-readiness-root")
+            .is_none()
+    );
+
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+    let first = html_element_by_id("dialog-readiness-first");
+    dispatch_escape_keydown(&first);
+    render_tick().await;
+    let root = html_element_by_id("dialog-readiness-root");
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::FocusOutside,
+            DismissibleReason::Escape
+        ]
+    );
+    assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
+    TimeoutFuture::new(30).await;
+    render_tick().await;
+    assert!(
+        document()
+            .get_element_by_id("dialog-readiness-root")
+            .is_none()
+    );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&branch);
+    remove_from_body(&outside);
+    remove_from_body(&return_target);
 }
 
 #[wasm_bindgen_test]

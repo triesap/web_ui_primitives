@@ -98,6 +98,7 @@ pub type DismissibleEscapeKeyDownEvent = DismissibleEvent<KeyboardEvent>;
 #[derive(Clone, Default)]
 /// Options for [`use_dismissible_layer`].
 pub struct DismissibleLayerOptions {
+    pub active: Option<Signal<bool>>,
     pub on_dismiss: Option<Callback<DismissibleReason>>,
     pub on_escape_key_down: Option<Callback<DismissibleEscapeKeyDownEvent>>,
     pub on_pointer_down_outside: Option<Callback<DismissiblePointerDownOutsideEvent>>,
@@ -226,6 +227,7 @@ pub fn DismissibleLayer(
     children: ChildrenFn,
 ) -> impl IntoView {
     let layer = use_dismissible_layer::<html::Div>(DismissibleLayerOptions {
+        active: None,
         on_dismiss,
         on_escape_key_down,
         on_pointer_down_outside,
@@ -252,18 +254,45 @@ where
     use wasm_bindgen::closure::Closure;
 
     let layer_id = dismissible_layer_register();
+    let registered = Arc::new(AtomicBool::new(true));
     let disable_pointer_down_outside_dismiss =
         pointer_down_outside_dismiss_disabled(options.disable_pointer_down_outside_dismiss);
     let document = web_sys::window().and_then(|window| window.document());
+    let active = options.active.unwrap_or_else(|| Signal::derive(|| true));
     let branches = options.branches;
+
+    let registration_registered = Arc::clone(&registered);
+    let registration_effect = RenderEffect::new(move |_| {
+        let is_active = active.get();
+        let is_registered = registration_registered.load(Ordering::SeqCst);
+        match (is_active, is_registered) {
+            (true, false) => {
+                dismissible_state_with(|state| {
+                    if !state.layers.contains(&layer_id) {
+                        state.layers.push(layer_id);
+                    }
+                });
+                registration_registered.store(true, Ordering::SeqCst);
+            }
+            (false, true) => {
+                dismissible_layer_unregister(layer_id);
+                registration_registered.store(false, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+    });
 
     if let Some(document) = document {
         if !disable_pointer_down_outside_dismiss {
             let on_dismiss = options.on_dismiss.clone();
             let on_pointer_down_outside = options.on_pointer_down_outside.clone();
+            let pointer_active = active;
             let pointer_node_ref = node_ref;
             let pointer_branches = branches.clone();
             let handler = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
+                if !pointer_active.get_untracked() {
+                    return;
+                }
                 if !dismissible_layer_is_topmost(layer_id) {
                     return;
                 }
@@ -301,9 +330,13 @@ where
 
         let on_dismiss = options.on_dismiss.clone();
         let on_focus_outside = options.on_focus_outside.clone();
+        let focus_active = active;
         let focus_node_ref = node_ref;
         let focus_branches = branches.clone();
         let focus_handler = Closure::wrap(Box::new(move |event: web_sys::FocusEvent| {
+            if !focus_active.get_untracked() {
+                return;
+            }
             if !dismissible_layer_is_topmost(layer_id) {
                 return;
             }
@@ -335,9 +368,13 @@ where
 
         let on_dismiss = options.on_dismiss;
         let on_escape_key_down = options.on_escape_key_down;
+        let key_active = active;
         let key_node_ref = node_ref;
         let key_branches = branches;
         let key_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+            if !key_active.get_untracked() {
+                return;
+            }
             if !dismissible_layer_is_topmost(layer_id) {
                 return;
             }
@@ -371,7 +408,10 @@ where
     }
 
     on_cleanup(move || {
-        dismissible_layer_unregister(layer_id);
+        drop(registration_effect);
+        if registered.swap(false, Ordering::SeqCst) {
+            dismissible_layer_unregister(layer_id);
+        }
     });
 }
 
