@@ -31,6 +31,66 @@ pub fn presence_state_next(
     }
 }
 
+#[derive(Clone)]
+/// Handle returned by [`use_presence`].
+pub struct PresenceBinding<E>
+where
+    E: html::ElementType,
+{
+    node_ref: NodeRef<E>,
+    state: RwSignal<PresenceState>,
+    present: Signal<bool>,
+    transition_end: Callback<TransitionEvent>,
+    animation_end: Callback<AnimationEvent>,
+}
+
+impl<E> PresenceBinding<E>
+where
+    E: html::ElementType,
+{
+    /// Returns the [`NodeRef`] that should be attached to the present element.
+    pub fn node_ref(&self) -> NodeRef<E> {
+        self.node_ref
+    }
+
+    /// Returns the current presence state.
+    pub fn state(&self) -> PresenceState {
+        self.state.get()
+    }
+
+    /// Returns `true` while the element should be rendered.
+    pub fn is_rendered(&self) -> bool {
+        self.state() != PresenceState::Unmounted
+    }
+
+    /// Returns the canonical data-state value for the attached element.
+    pub fn data_state(&self) -> &'static str {
+        if self.present.get() { "open" } else { "closed" }
+    }
+
+    /// Returns the transition-end handler for the attached element.
+    pub fn transition_end_handler(&self) -> Callback<TransitionEvent> {
+        self.transition_end
+    }
+
+    /// Returns the animation-end handler for the attached element.
+    pub fn animation_end_handler(&self) -> Callback<AnimationEvent> {
+        self.animation_end
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+trait PresenceElementOutput: wasm_bindgen::JsCast + Clone + 'static {}
+
+#[cfg(target_arch = "wasm32")]
+impl<T> PresenceElementOutput for T where T: wasm_bindgen::JsCast + Clone + 'static {}
+
+#[cfg(not(target_arch = "wasm32"))]
+trait PresenceElementOutput: Clone + 'static {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<T> PresenceElementOutput for T where T: Clone + 'static {}
+
 fn presence_should_complete_exit(
     current: PresenceState,
     present: bool,
@@ -205,6 +265,32 @@ fn presence_exit_timeout_ms(root: &web_sys::Element) -> u32 {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a wrapper-free presence binding.
+pub fn use_presence<E>(
+    present: impl Into<Signal<bool>>,
+    on_exit_complete: Option<Callback<()>>,
+) -> PresenceBinding<E>
+where
+    E: html::ElementType,
+    E::Output: Clone + 'static,
+{
+    create_presence_binding(NodeRef::<E>::new(), present.into(), on_exit_complete)
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free presence binding.
+pub fn use_presence<E>(
+    present: impl Into<Signal<bool>>,
+    on_exit_complete: Option<Callback<()>>,
+) -> PresenceBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    create_presence_binding(NodeRef::<E>::new(), present.into(), on_exit_complete)
+}
+
 #[component]
 /// Conditionally mounts content while allowing exit transitions to finish.
 ///
@@ -218,7 +304,43 @@ pub fn Presence(
     #[prop(optional)] on_exit_complete: Option<Callback<()>>,
     children: ChildrenFn,
 ) -> impl IntoView {
-    let node_ref = NodeRef::<html::Div>::new();
+    let presence = use_presence::<html::Div>(present, on_exit_complete);
+
+    view! {
+        {move || -> AnyView {
+            if !presence.is_rendered() {
+                ().into_any()
+            } else {
+                let node_ref = presence.node_ref();
+                let data_state = presence.clone();
+                let transition_end = presence.transition_end_handler();
+                let animation_end = presence.animation_end_handler();
+
+                view! {
+                    <div
+                        node_ref=node_ref
+                        data-state=move || data_state.data_state()
+                        on:transitionend=move |event| transition_end.run(event)
+                        on:animationend=move |event| animation_end.run(event)
+                    >
+                        {children()}
+                    </div>
+                }
+                .into_any()
+            }
+        }}
+    }
+}
+
+fn create_presence_binding<E>(
+    node_ref: NodeRef<E>,
+    present: Signal<bool>,
+    on_exit_complete: Option<Callback<()>>,
+) -> PresenceBinding<E>
+where
+    E: html::ElementType,
+    E::Output: PresenceElementOutput,
+{
     let state = RwSignal::new(if present.get_untracked() {
         PresenceState::Mounted
     } else {
@@ -271,17 +393,7 @@ pub fn Presence(
                 return;
             }
 
-            #[cfg(target_arch = "wasm32")]
-            let exit_timeout_ms = node_ref
-                .get_untracked()
-                .as_ref()
-                .map(|root| {
-                    let element: web_sys::Element = root.clone().into();
-                    presence_exit_timeout_ms(&element)
-                })
-                .unwrap_or(0);
-            #[cfg(not(target_arch = "wasm32"))]
-            let exit_timeout_ms = 0;
+            let exit_timeout_ms = presence_node_ref_exit_timeout_ms(node_ref);
 
             if exit_timeout_ms == 0 {
                 end_handler();
@@ -315,55 +427,63 @@ pub fn Presence(
         drop(effect);
     });
 
-    let render = move || -> AnyView {
-        if state.get() == PresenceState::Unmounted {
-            ().into_any()
-        } else {
-            let transition_end = {
-                let end_handler = Arc::clone(&end_handler);
-                move |event: TransitionEvent| {
-                    if presence_should_complete_exit(
-                        state.get_untracked(),
-                        present.get_untracked(),
-                        presence_event_matches_current_target(
-                            event.target(),
-                            event.current_target(),
-                        ),
-                    ) {
-                        end_handler();
-                    }
-                }
-            };
-            let animation_end = {
-                let end_handler = Arc::clone(&end_handler);
-                move |event: AnimationEvent| {
-                    if presence_should_complete_exit(
-                        state.get_untracked(),
-                        present.get_untracked(),
-                        presence_event_matches_current_target(
-                            event.target(),
-                            event.current_target(),
-                        ),
-                    ) {
-                        end_handler();
-                    }
-                }
-            };
-            view! {
-                <div
-                    node_ref=node_ref
-                    data-state=move || if present.get() { "open" } else { "closed" }
-                    on:transitionend=transition_end
-                    on:animationend=animation_end
-                >
-                    {children()}
-                </div>
+    let transition_end = {
+        let end_handler = Arc::clone(&end_handler);
+        Callback::new(move |event: TransitionEvent| {
+            if presence_should_complete_exit(
+                state.get_untracked(),
+                present.get_untracked(),
+                presence_event_matches_current_target(event.target(), event.current_target()),
+            ) {
+                end_handler();
             }
-            .into_any()
-        }
+        })
+    };
+    let animation_end = {
+        let end_handler = Arc::clone(&end_handler);
+        Callback::new(move |event: AnimationEvent| {
+            if presence_should_complete_exit(
+                state.get_untracked(),
+                present.get_untracked(),
+                presence_event_matches_current_target(event.target(), event.current_target()),
+            ) {
+                end_handler();
+            }
+        })
     };
 
-    view! { {render} }
+    PresenceBinding {
+        node_ref,
+        state,
+        present,
+        transition_end,
+        animation_end,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn presence_node_ref_exit_timeout_ms<E>(node_ref: NodeRef<E>) -> u32
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use wasm_bindgen::JsCast;
+
+    node_ref
+        .get_untracked()
+        .and_then(|root| root.dyn_into::<web_sys::Element>().ok())
+        .as_ref()
+        .map(presence_exit_timeout_ms)
+        .unwrap_or(0)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn presence_node_ref_exit_timeout_ms<E>(node_ref: NodeRef<E>) -> u32
+where
+    E: html::ElementType,
+{
+    let _ = node_ref;
+    0
 }
 
 #[cfg(test)]

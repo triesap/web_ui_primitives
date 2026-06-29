@@ -23,6 +23,35 @@ pub fn dismissible_is_outside(is_inside: bool) -> bool {
     !is_inside
 }
 
+#[derive(Clone, Default)]
+/// Options for [`use_dismissible_layer`].
+pub struct DismissibleLayerOptions {
+    pub on_dismiss: Option<Callback<DismissibleReason>>,
+    pub on_escape_key_down: Option<Callback<KeyboardEvent>>,
+    pub on_pointer_down_outside: Option<Callback<PointerEvent>>,
+    pub on_focus_outside: Option<Callback<FocusEvent>>,
+    pub disable_pointer_down_outside_dismiss: bool,
+}
+
+#[derive(Clone)]
+/// Handle returned by [`use_dismissible_layer`].
+pub struct DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+{
+    node_ref: NodeRef<E>,
+}
+
+impl<E> DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+{
+    /// Returns the [`NodeRef`] that should be attached to the layer element.
+    pub fn node_ref(&self) -> NodeRef<E> {
+        self.node_ref
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug, Default)]
 struct DismissibleState {
@@ -61,8 +90,28 @@ fn dismissible_layer_is_topmost(id: u64) -> bool {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn dismissible_layer_is_topmost(_id: u64) -> bool {
-    false
+/// Creates a wrapper-free dismissible layer binding.
+pub fn use_dismissible_layer<E>(options: DismissibleLayerOptions) -> DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+    E::Output: 'static,
+{
+    let _ = options;
+    DismissibleLayerBinding {
+        node_ref: NodeRef::<E>::new(),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free dismissible layer binding.
+pub fn use_dismissible_layer<E>(options: DismissibleLayerOptions) -> DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    let node_ref = NodeRef::<E>::new();
+    attach_dismissible_layer(node_ref, options);
+    DismissibleLayerBinding { node_ref }
 }
 
 #[component]
@@ -79,18 +128,106 @@ pub fn DismissibleLayer(
     #[prop(optional)] disable_pointer_down_outside_dismiss: bool,
     children: ChildrenFn,
 ) -> impl IntoView {
-    let node_ref = NodeRef::<html::Div>::new();
-    let disable_pointer_down_outside_dismiss =
-        pointer_down_outside_dismiss_disabled(disable_pointer_down_outside_dismiss);
+    let layer = use_dismissible_layer::<html::Div>(DismissibleLayerOptions {
+        on_dismiss,
+        on_escape_key_down,
+        on_pointer_down_outside,
+        on_focus_outside,
+        disable_pointer_down_outside_dismiss,
+    });
 
-    #[cfg(target_arch = "wasm32")]
+    view! {
+        <div node_ref=layer.node_ref()>
+            {children()}
+        </div>
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn attach_dismissible_layer<E>(node_ref: NodeRef<E>, options: DismissibleLayerOptions)
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use send_wrapper::SendWrapper;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
     let layer_id = dismissible_layer_register();
-    #[cfg(not(target_arch = "wasm32"))]
-    let layer_id = 0;
+    let disable_pointer_down_outside_dismiss =
+        pointer_down_outside_dismiss_disabled(options.disable_pointer_down_outside_dismiss);
+    let document = web_sys::window().and_then(|window| window.document());
 
-    let on_keydown = {
-        move |event: KeyboardEvent| {
+    if let Some(document) = document {
+        if !disable_pointer_down_outside_dismiss {
+            let on_dismiss = options.on_dismiss.clone();
+            let on_pointer_down_outside = options.on_pointer_down_outside.clone();
+            let pointer_node_ref = node_ref;
+            let handler = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
+                if !dismissible_layer_is_topmost(layer_id) {
+                    return;
+                }
+                let is_inside =
+                    dismissible_event_target_is_inside(event.target(), pointer_node_ref);
+                if dismissible_is_outside(is_inside) {
+                    if let Some(callback) = on_pointer_down_outside.as_ref() {
+                        callback.run(event.clone());
+                    }
+                    if let Some(callback) = on_dismiss.as_ref() {
+                        callback.run(DismissibleReason::PointerDownOutside);
+                    }
+                }
+            }) as Box<dyn FnMut(_)>);
+            let _ = document
+                .add_event_listener_with_callback("pointerdown", handler.as_ref().unchecked_ref());
+            let cleanup_doc = SendWrapper::new(document.clone());
+            let cleanup_handler = SendWrapper::new(handler);
+            on_cleanup(move || {
+                let document = cleanup_doc.take();
+                let handler = cleanup_handler.take();
+                let _ = document.remove_event_listener_with_callback(
+                    "pointerdown",
+                    handler.as_ref().unchecked_ref(),
+                );
+            });
+        }
+
+        let on_dismiss = options.on_dismiss.clone();
+        let on_focus_outside = options.on_focus_outside.clone();
+        let focus_node_ref = node_ref;
+        let focus_handler = Closure::wrap(Box::new(move |event: web_sys::FocusEvent| {
             if !dismissible_layer_is_topmost(layer_id) {
+                return;
+            }
+            let is_inside = dismissible_event_target_is_inside(event.target(), focus_node_ref);
+            if dismissible_is_outside(is_inside) {
+                if let Some(callback) = on_focus_outside.as_ref() {
+                    callback.run(event.clone());
+                }
+                if let Some(callback) = on_dismiss.as_ref() {
+                    callback.run(DismissibleReason::FocusOutside);
+                }
+            }
+        }) as Box<dyn FnMut(_)>);
+        let _ = document
+            .add_event_listener_with_callback("focusin", focus_handler.as_ref().unchecked_ref());
+        let cleanup_doc = SendWrapper::new(document.clone());
+        let cleanup_handler = SendWrapper::new(focus_handler);
+        on_cleanup(move || {
+            let document = cleanup_doc.take();
+            let handler = cleanup_handler.take();
+            let _ = document
+                .remove_event_listener_with_callback("focusin", handler.as_ref().unchecked_ref());
+        });
+
+        let on_dismiss = options.on_dismiss;
+        let on_escape_key_down = options.on_escape_key_down;
+        let key_node_ref = node_ref;
+        let key_handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+            if !dismissible_layer_is_topmost(layer_id) {
+                return;
+            }
+            if !dismissible_event_target_is_inside(event.target(), key_node_ref) {
                 return;
             }
             if !dismissible_is_escape(&event.key()) {
@@ -102,120 +239,47 @@ pub fn DismissibleLayer(
             if let Some(callback) = on_dismiss.as_ref() {
                 callback.run(DismissibleReason::Escape);
             }
-        }
-    };
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        use send_wrapper::SendWrapper;
-        use wasm_bindgen::JsCast;
-        use wasm_bindgen::closure::Closure;
-
-        let on_dismiss = on_dismiss.clone();
-        let on_pointer_down_outside = on_pointer_down_outside.clone();
-        let on_focus_outside = on_focus_outside.clone();
-        let node_ref = node_ref;
-
-        let document = web_sys::window().and_then(|window| window.document());
-
-        if let Some(document) = document.clone() {
-            if !disable_pointer_down_outside_dismiss {
-                let on_dismiss = on_dismiss.clone();
-                let on_pointer_down_outside = on_pointer_down_outside.clone();
-                let pointer_node_ref = node_ref;
-                let handler = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
-                    if !dismissible_layer_is_topmost(layer_id) {
-                        return;
-                    }
-                    let target = event
-                        .target()
-                        .and_then(|target| target.dyn_into::<web_sys::Node>().ok());
-                    let root = pointer_node_ref.get_untracked();
-                    let is_inside = target
-                        .as_ref()
-                        .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
-                        .unwrap_or(false);
-                    if dismissible_is_outside(is_inside) {
-                        if let Some(callback) = on_pointer_down_outside.as_ref() {
-                            callback.run(event.clone());
-                        }
-                        if let Some(callback) = on_dismiss.as_ref() {
-                            callback.run(DismissibleReason::PointerDownOutside);
-                        }
-                    }
-                }) as Box<dyn FnMut(_)>);
-                let _ = document.add_event_listener_with_callback(
-                    "pointerdown",
-                    handler.as_ref().unchecked_ref(),
-                );
-                let cleanup_doc = SendWrapper::new(document.clone());
-                let cleanup_handler = SendWrapper::new(handler);
-                on_cleanup(move || {
-                    let document = cleanup_doc.take();
-                    let handler = cleanup_handler.take();
-                    let _ = document.remove_event_listener_with_callback(
-                        "pointerdown",
-                        handler.as_ref().unchecked_ref(),
-                    );
-                });
-            }
-
-            let focus_node_ref = node_ref;
-            let focus_handler = Closure::wrap(Box::new(move |event: web_sys::FocusEvent| {
-                if !dismissible_layer_is_topmost(layer_id) {
-                    return;
-                }
-                let target = event
-                    .target()
-                    .and_then(|target| target.dyn_into::<web_sys::Node>().ok());
-                let root = focus_node_ref.get_untracked();
-                let is_inside = target
-                    .as_ref()
-                    .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
-                    .unwrap_or(false);
-                if dismissible_is_outside(is_inside) {
-                    if let Some(callback) = on_focus_outside.as_ref() {
-                        callback.run(event.clone());
-                    }
-                    if let Some(callback) = on_dismiss.as_ref() {
-                        callback.run(DismissibleReason::FocusOutside);
-                    }
-                }
-            }) as Box<dyn FnMut(_)>);
-            let _ = document.add_event_listener_with_callback(
-                "focusin",
-                focus_handler.as_ref().unchecked_ref(),
-            );
-            let cleanup_doc = SendWrapper::new(document);
-            let cleanup_handler = SendWrapper::new(focus_handler);
-            on_cleanup(move || {
-                let document = cleanup_doc.take();
-                let handler = cleanup_handler.take();
-                let _ = document.remove_event_listener_with_callback(
-                    "focusin",
-                    handler.as_ref().unchecked_ref(),
-                );
-            });
-        }
-
+        }) as Box<dyn FnMut(_)>);
+        let _ = document
+            .add_event_listener_with_callback("keydown", key_handler.as_ref().unchecked_ref());
+        let cleanup_doc = SendWrapper::new(document);
+        let cleanup_handler = SendWrapper::new(key_handler);
         on_cleanup(move || {
-            dismissible_layer_unregister(layer_id);
+            let document = cleanup_doc.take();
+            let handler = cleanup_handler.take();
+            let _ = document
+                .remove_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
         });
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let _ = on_pointer_down_outside;
-        let _ = on_focus_outside;
-        let _ = disable_pointer_down_outside_dismiss;
-    }
 
-    view! {
-        <div node_ref=node_ref on:keydown=on_keydown>
-            {children()}
-        </div>
-    }
+    on_cleanup(move || {
+        dismissible_layer_unregister(layer_id);
+    });
 }
 
+#[cfg(target_arch = "wasm32")]
+fn dismissible_event_target_is_inside<E>(
+    target: Option<web_sys::EventTarget>,
+    node_ref: NodeRef<E>,
+) -> bool
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use wasm_bindgen::JsCast;
+
+    let target = target.and_then(|target| target.dyn_into::<web_sys::Node>().ok());
+    let root = node_ref
+        .get_untracked()
+        .and_then(|root| root.dyn_into::<web_sys::Node>().ok());
+
+    target
+        .as_ref()
+        .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
+        .unwrap_or(false)
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn pointer_down_outside_dismiss_disabled(disable_pointer_down_outside_dismiss: bool) -> bool {
     disable_pointer_down_outside_dismiss
 }

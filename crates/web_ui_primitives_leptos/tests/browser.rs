@@ -1,14 +1,16 @@
 #![cfg(target_arch = "wasm32")]
 
 use gloo_timers::future::TimeoutFuture;
+use leptos::html;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 use web_ui_primitives_leptos::{
-    DismissibleLayer, DismissibleReason, FocusScope, Portal, Presence, modal_hide_siblings,
-    scroll_lock_acquire, scroll_lock_release,
+    DismissibleLayer, DismissibleLayerOptions, DismissibleReason, FocusScope, FocusScopeOptions,
+    Portal, Presence, modal_hide_siblings, scroll_lock_acquire, scroll_lock_release,
+    use_dismissible_layer, use_focus_scope, use_presence,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -155,6 +157,64 @@ fn set_body_style(name: &str, value: &str) {
 
 fn scroll_y() -> f64 {
     window().scroll_y().expect("read scroll y")
+}
+
+#[wasm_bindgen_test]
+async fn dismissible_layer_binding_attaches_to_the_target_element_without_a_wrapper() {
+    let host = append_div("dismissible-binding-host");
+    let outside = append_div("dismissible-binding-outside");
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+        let layer = use_dismissible_layer::<html::Section>(DismissibleLayerOptions {
+            on_dismiss: Some(Callback::new(move |reason| {
+                dismissals.lock().expect("dismissals lock").push(reason);
+            })),
+            ..Default::default()
+        });
+
+        view! {
+            <section id="dismissible-binding-root" node_ref=layer.node_ref()>
+                <button id="dismissible-binding-inside">"Inside"</button>
+            </section>
+        }
+    });
+
+    render_tick().await;
+    let root = host.first_element_child().expect("binding root");
+    assert_eq!(host.child_element_count(), 1);
+    assert_eq!(root.tag_name(), "SECTION");
+    assert_eq!(root.id(), "dismissible-binding-root");
+
+    let inside = html_element_by_id("dismissible-binding-inside");
+    dispatch_pointer_down(&inside);
+    render_tick().await;
+    assert!(dismissals.lock().expect("dismissals lock").is_empty());
+
+    dispatch_pointer_down(&outside);
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::PointerDownOutside]
+    );
+
+    let inside = html_element_by_id("dismissible-binding-inside");
+    dispatch_escape_keydown(&inside);
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::PointerDownOutside,
+            DismissibleReason::Escape
+        ]
+    );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
@@ -3005,6 +3065,50 @@ async fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops()
 }
 
 #[wasm_bindgen_test]
+async fn focus_scope_binding_attaches_to_the_target_element_without_a_wrapper() {
+    let host = append_div("focus-binding-host");
+
+    let mount = mount_to(host.clone(), move || {
+        let scope = use_focus_scope::<html::Section>(FocusScopeOptions {
+            trapped: true,
+            auto_focus: true,
+            ..Default::default()
+        });
+
+        view! {
+            <section id="focus-binding-root" node_ref=scope.node_ref() tabindex="-1">
+                <button id="focus-binding-first">"First"</button>
+                <button id="focus-binding-second">"Second"</button>
+            </section>
+        }
+    });
+
+    render_tick().await;
+    let root = host.first_element_child().expect("focus binding root");
+    assert_eq!(host.child_element_count(), 1);
+    assert_eq!(root.tag_name(), "SECTION");
+    assert_eq!(root.id(), "focus-binding-root");
+    assert_eq!(active_id().as_deref(), Some("focus-binding-first"));
+
+    let first = html_element_by_id("focus-binding-first");
+    let second = html_element_by_id("focus-binding-second");
+
+    let first_tab = dispatch_tab_keydown(&first, false);
+    render_tick().await;
+    assert!(first_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-binding-second"));
+
+    let second_tab = dispatch_tab_keydown(&second, false);
+    render_tick().await;
+    assert!(second_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-binding-first"));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 async fn focus_scope_traps_tab_within_the_live_scope() {
     let host = append_div("focus-scope-host");
 
@@ -3184,6 +3288,60 @@ async fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focus
 
     assert_eq!(wrapper.tab_index(), -1);
     assert!(active_element().is_some_and(|active| { active.is_same_node(Some(&wrapper_element)) }));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn presence_binding_attaches_to_the_target_element_without_a_wrapper() {
+    let host = append_div("presence-binding-host");
+    let present = RwSignal::new(true);
+
+    let mount = mount_to(host.clone(), move || {
+        let presence = use_presence::<html::Section>(Signal::derive(move || present.get()), None);
+
+        view! {
+            {move || -> AnyView {
+                if !presence.is_rendered() {
+                    ().into_any()
+                } else {
+                    let node_ref = presence.node_ref();
+                    let data_state = presence.clone();
+                    let transition_end = presence.transition_end_handler();
+                    let animation_end = presence.animation_end_handler();
+
+                    view! {
+                        <section
+                            id="presence-binding-root"
+                            node_ref=node_ref
+                            data-state=move || data_state.data_state()
+                            on:transitionend=move |event| transition_end.run(event)
+                            on:animationend=move |event| animation_end.run(event)
+                        >
+                            "Present"
+                        </section>
+                    }
+                    .into_any()
+                }
+            }}
+        }
+    });
+
+    render_tick().await;
+    let root = host.first_element_child().expect("presence binding root");
+    assert_eq!(host.child_element_count(), 1);
+    assert_eq!(root.tag_name(), "SECTION");
+    assert_eq!(root.id(), "presence-binding-root");
+    assert_eq!(
+        attr(&html_element_by_id("presence-binding-root"), "data-state").as_deref(),
+        Some("open")
+    );
+
+    present.set(false);
+    render_tick().await;
+    assert!(host.first_element_child().is_none());
 
     drop(mount);
     render_tick().await;

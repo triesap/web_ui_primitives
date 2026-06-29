@@ -37,18 +37,22 @@ mod presence;
 mod scroll_lock;
 
 pub use dismissible::{
-    DismissibleLayer, DismissibleReason, dismissible_is_escape, dismissible_is_outside,
+    DismissibleLayer, DismissibleLayerBinding, DismissibleLayerOptions, DismissibleReason,
+    dismissible_is_escape, dismissible_is_outside, use_dismissible_layer,
 };
 pub use dom_bindings::{
     BoundElement, DomAttribute, DomAttributeValue, DomBindingError, DomBindingResult,
     DomEventBinding, DomEventHandler, DomTarget, apply_dom_attribute_delta, use_dom_bindings,
 };
-pub use focus::{FocusScope, focus_scope_next_index, focus_scope_selector};
+pub use focus::{
+    FocusScope, FocusScopeBinding, FocusScopeOptions, focus_scope_next_index, focus_scope_selector,
+    use_focus_scope,
+};
 pub use modal::{
     ModalError, ModalGuard, ModalResult, ModalTarget, modal_hide_siblings, modal_restore,
 };
 pub use portal::{Portal, PortalMount};
-pub use presence::{Presence, PresenceState, presence_state_next};
+pub use presence::{Presence, PresenceBinding, PresenceState, presence_state_next, use_presence};
 pub use scroll_lock::{
     ScrollLockError, ScrollLockGuard, ScrollLockResult, scroll_lock_acquire, scroll_lock_release,
 };

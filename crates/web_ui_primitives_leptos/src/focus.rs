@@ -22,6 +22,60 @@ pub fn focus_scope_next_index(current: usize, count: usize, shift: bool) -> usiz
     focus_scope_target_index(Some(current), count, shift)
 }
 
+#[derive(Clone, Default)]
+/// Options for [`use_focus_scope`].
+pub struct FocusScopeOptions {
+    pub trapped: bool,
+    pub auto_focus: bool,
+    pub return_focus: bool,
+    pub on_mount_auto_focus: Option<Callback<()>>,
+    pub on_unmount_auto_focus: Option<Callback<()>>,
+}
+
+#[derive(Clone)]
+/// Handle returned by [`use_focus_scope`].
+pub struct FocusScopeBinding<E>
+where
+    E: html::ElementType,
+{
+    node_ref: NodeRef<E>,
+}
+
+impl<E> FocusScopeBinding<E>
+where
+    E: html::ElementType,
+{
+    /// Returns the [`NodeRef`] that should be attached to the scoped element.
+    pub fn node_ref(&self) -> NodeRef<E> {
+        self.node_ref
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a wrapper-free focus scope binding.
+pub fn use_focus_scope<E>(options: FocusScopeOptions) -> FocusScopeBinding<E>
+where
+    E: html::ElementType,
+    E::Output: 'static,
+{
+    let _ = options;
+    FocusScopeBinding {
+        node_ref: NodeRef::<E>::new(),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free focus scope binding.
+pub fn use_focus_scope<E>(options: FocusScopeOptions) -> FocusScopeBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    let node_ref = NodeRef::<E>::new();
+    attach_focus_scope(node_ref, options);
+    FocusScopeBinding { node_ref }
+}
+
 fn focus_scope_target_index(current: Option<usize>, count: usize, shift: bool) -> usize {
     if count == 0 {
         return 0;
@@ -60,82 +114,13 @@ pub fn FocusScope(
     #[prop(optional)] on_unmount_auto_focus: Option<Callback<()>>,
     children: ChildrenFn,
 ) -> impl IntoView {
-    let node_ref = NodeRef::<html::Div>::new();
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        use send_wrapper::SendWrapper;
-        use wasm_bindgen::JsCast;
-        use wasm_bindgen::closure::Closure;
-
-        let on_mount_auto_focus = on_mount_auto_focus.clone();
-        let on_unmount_auto_focus = on_unmount_auto_focus.clone();
-        let node_ref = node_ref;
-
-        node_ref.on_load(move |root| {
-            let document = match web_sys::window().and_then(|window| window.document()) {
-                Some(document) => document,
-                None => return,
-            };
-            let previous_focus = document.active_element().map(SendWrapper::new);
-
-            if auto_focus {
-                let _ = focus_scope_focus_first(&root, &document);
-                if let Some(callback) = on_mount_auto_focus.as_ref() {
-                    callback.run(());
-                }
-            }
-
-            if trapped {
-                let root_focus = root.clone();
-                let document_focus = document.clone();
-                let handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-                    if event.key() != "Tab" {
-                        return;
-                    }
-                    event.prevent_default();
-                    let _ = focus_scope_cycle(&root_focus, &document_focus, event.shift_key());
-                }) as Box<dyn FnMut(_)>);
-                let _ = root
-                    .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-                let cleanup_root = SendWrapper::new(root.clone());
-                let cleanup_handler = SendWrapper::new(handler);
-                on_cleanup(move || {
-                    let root = cleanup_root.take();
-                    let handler = cleanup_handler.take();
-                    let _ = root.remove_event_listener_with_callback(
-                        "keydown",
-                        handler.as_ref().unchecked_ref(),
-                    );
-                });
-            }
-
-            if return_focus {
-                let on_unmount_auto_focus = on_unmount_auto_focus.clone();
-                let previous_focus = previous_focus;
-                on_cleanup(move || {
-                    if let Some(element) = previous_focus {
-                        let element = element.take();
-                        let _ = element
-                            .dyn_ref::<web_sys::HtmlElement>()
-                            .map(|el| el.focus());
-                    }
-                    if let Some(callback) = on_unmount_auto_focus.as_ref() {
-                        callback.run(());
-                    }
-                });
-            }
-        });
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let _ = trapped;
-        let _ = auto_focus;
-        let _ = return_focus;
-        let _ = on_mount_auto_focus;
-        let _ = on_unmount_auto_focus;
-    }
+    let scope = use_focus_scope::<html::Div>(FocusScopeOptions {
+        trapped,
+        auto_focus,
+        return_focus,
+        on_mount_auto_focus,
+        on_unmount_auto_focus,
+    });
 
     let on_keydown = move |event: KeyboardEvent| {
         if trapped && event.key() == "Escape" {
@@ -144,10 +129,133 @@ pub fn FocusScope(
     };
 
     view! {
-        <div node_ref=node_ref tabindex="-1" on:keydown=on_keydown>
+        <div node_ref=scope.node_ref() tabindex="-1" on:keydown=on_keydown>
             {children()}
         </div>
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn attach_focus_scope<E>(node_ref: NodeRef<E>, options: FocusScopeOptions)
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use send_wrapper::SendWrapper;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    let document = web_sys::window().and_then(|window| window.document());
+    let previous_focus = document
+        .as_ref()
+        .and_then(|document| document.active_element())
+        .map(SendWrapper::new);
+    let mounted = RwSignal::new(false);
+    let FocusScopeOptions {
+        trapped,
+        auto_focus,
+        return_focus,
+        on_mount_auto_focus,
+        on_unmount_auto_focus,
+    } = options;
+
+    if trapped {
+        if let Some(document) = document.clone() {
+            let trap_node_ref = node_ref;
+            let document_focus = document.clone();
+            let handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+                if event.key() != "Tab" {
+                    return;
+                }
+                if !focus_event_target_is_inside(event.target(), trap_node_ref) {
+                    return;
+                }
+                let Some(root) = trap_node_ref
+                    .get_untracked()
+                    .and_then(|root| root.dyn_into::<web_sys::Element>().ok())
+                else {
+                    return;
+                };
+                event.prevent_default();
+                let _ = focus_scope_cycle(&root, &document_focus, event.shift_key());
+            }) as Box<dyn FnMut(_)>);
+            let _ = document
+                .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+            let cleanup_document = SendWrapper::new(document);
+            let cleanup_handler = SendWrapper::new(handler);
+            on_cleanup(move || {
+                let document = cleanup_document.take();
+                let handler = cleanup_handler.take();
+                let _ = document.remove_event_listener_with_callback(
+                    "keydown",
+                    handler.as_ref().unchecked_ref(),
+                );
+            });
+        }
+    }
+
+    let effect = RenderEffect::new(move |_| {
+        if mounted.get() {
+            return;
+        }
+        let Some(document) = document.clone() else {
+            mounted.set(true);
+            return;
+        };
+        let Some(root) = node_ref.get() else {
+            return;
+        };
+        let Ok(root) = root.dyn_into::<web_sys::Element>() else {
+            mounted.set(true);
+            return;
+        };
+
+        if auto_focus {
+            let _ = focus_scope_focus_first(&root, &document);
+            if let Some(callback) = on_mount_auto_focus.as_ref() {
+                callback.run(());
+            }
+        }
+
+        mounted.set(true);
+    });
+
+    on_cleanup(move || {
+        drop(effect);
+        if return_focus {
+            if let Some(element) = previous_focus {
+                let element = element.take();
+                let _ = element
+                    .dyn_ref::<web_sys::HtmlElement>()
+                    .map(|el| el.focus());
+            }
+            if let Some(callback) = on_unmount_auto_focus.as_ref() {
+                callback.run(());
+            }
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_event_target_is_inside<E>(
+    target: Option<web_sys::EventTarget>,
+    node_ref: NodeRef<E>,
+) -> bool
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use wasm_bindgen::JsCast;
+
+    let target = target.and_then(|target| target.dyn_into::<web_sys::Node>().ok());
+    let root = node_ref
+        .get_untracked()
+        .and_then(|root| root.dyn_into::<web_sys::Node>().ok());
+
+    target
+        .as_ref()
+        .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
+        .unwrap_or(false)
 }
 
 #[cfg(target_arch = "wasm32")]
