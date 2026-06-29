@@ -3109,6 +3109,146 @@ async fn focus_scope_binding_attaches_to_the_target_element_without_a_wrapper() 
 }
 
 #[wasm_bindgen_test]
+async fn focus_scope_binding_auto_focuses_the_target_when_no_child_is_tabbable() {
+    let host = append_div("focus-binding-empty-host");
+
+    let mount = mount_to(host.clone(), move || {
+        let scope = use_focus_scope::<html::Section>(FocusScopeOptions {
+            auto_focus: true,
+            ..Default::default()
+        });
+
+        view! {
+            <section id="focus-binding-empty-root" node_ref=scope.node_ref() tabindex="-1">
+                <span id="focus-binding-empty-child">"Only child"</span>
+            </section>
+        }
+    });
+
+    render_tick().await;
+
+    let root = html_element_by_id("focus-binding-empty-root");
+    let root_element: web_sys::Element = root.clone().into();
+    assert!(active_element().is_some_and(|active| active.is_same_node(Some(&root_element))));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn focus_scope_skips_disabled_hidden_inert_and_negative_tabindex_candidates() {
+    let host = append_div("focus-filter-host");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <FocusScope trapped=true>
+                <button id="focus-filter-first">"First"</button>
+                <button id="focus-filter-disabled">"Disabled"</button>
+                <button id="focus-filter-hidden">"Hidden"</button>
+                <button id="focus-filter-inert">"Inert"</button>
+                <button id="focus-filter-aria-hidden">"Aria hidden"</button>
+                <button id="focus-filter-display-none">"Display none"</button>
+                <button id="focus-filter-visibility-hidden">"Visibility hidden"</button>
+                <button id="focus-filter-negative-tabindex" tabindex="-2">"Negative"</button>
+                <button id="focus-filter-last">"Last"</button>
+            </FocusScope>
+        }
+    });
+
+    render_tick().await;
+    html_element_by_id("focus-filter-disabled")
+        .set_attribute("disabled", "")
+        .expect("set disabled");
+    html_element_by_id("focus-filter-hidden")
+        .set_attribute("hidden", "")
+        .expect("set hidden");
+    html_element_by_id("focus-filter-inert")
+        .set_attribute("inert", "")
+        .expect("set inert");
+    html_element_by_id("focus-filter-aria-hidden")
+        .set_attribute("aria-hidden", "true")
+        .expect("set aria hidden");
+    html_element_by_id("focus-filter-display-none")
+        .style()
+        .set_property("display", "none")
+        .expect("set display none");
+    html_element_by_id("focus-filter-visibility-hidden")
+        .style()
+        .set_property("visibility", "hidden")
+        .expect("set visibility hidden");
+
+    let first = html_element_by_id("focus-filter-first");
+    let last = html_element_by_id("focus-filter-last");
+
+    first.focus().expect("focus first");
+    render_tick().await;
+
+    let first_tab = dispatch_tab_keydown(&first, false);
+    render_tick().await;
+    assert!(first_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-filter-last"));
+
+    let shift_tab = dispatch_tab_keydown(&last, true);
+    render_tick().await;
+    assert!(shift_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-filter-first"));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn nested_focus_scopes_trap_only_their_owned_candidates() {
+    let host = append_div("focus-nested-host");
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <FocusScope trapped=true>
+                <button id="focus-nested-outer-first">"Outer first"</button>
+                <FocusScope trapped=true>
+                    <button id="focus-nested-inner-first">"Inner first"</button>
+                    <button id="focus-nested-inner-second">"Inner second"</button>
+                </FocusScope>
+                <button id="focus-nested-outer-last">"Outer last"</button>
+            </FocusScope>
+        }
+    });
+
+    render_tick().await;
+
+    let outer_first = html_element_by_id("focus-nested-outer-first");
+    outer_first.focus().expect("focus outer first");
+    render_tick().await;
+
+    let outer_tab = dispatch_tab_keydown(&outer_first, false);
+    render_tick().await;
+    assert!(outer_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-nested-outer-last"));
+
+    let inner_first = html_element_by_id("focus-nested-inner-first");
+    let inner_second = html_element_by_id("focus-nested-inner-second");
+    inner_first.focus().expect("focus inner first");
+    render_tick().await;
+
+    let inner_tab = dispatch_tab_keydown(&inner_first, false);
+    render_tick().await;
+    assert!(inner_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-nested-inner-second"));
+
+    let inner_wrap_tab = dispatch_tab_keydown(&inner_second, false);
+    render_tick().await;
+    assert!(inner_wrap_tab.default_prevented());
+    assert_eq!(active_id().as_deref(), Some("focus-nested-inner-first"));
+    assert_ne!(active_id().as_deref(), Some("focus-nested-outer-last"));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
 async fn focus_scope_traps_tab_within_the_live_scope() {
     let host = append_div("focus-scope-host");
 

@@ -9,6 +9,10 @@ use wasm_bindgen::JsCast;
 
 const FOCUSABLE_SELECTOR: &str =
     "a[href],button,textarea,input,select,[tabindex]:not([tabindex='-1'])";
+#[cfg(target_arch = "wasm32")]
+const FOCUS_SCOPE_ATTR: &str = "data-web-ui-focus-scope";
+#[cfg(target_arch = "wasm32")]
+const FOCUS_SCOPE_MARKER_SELECTOR: &str = "[data-web-ui-focus-scope]";
 
 /// Returns the selector used to find focusable descendants in a focus scope.
 pub fn focus_scope_selector() -> &'static str {
@@ -176,6 +180,9 @@ where
                 else {
                     return;
                 };
+                if !focus_event_target_is_owned_by_scope(event.target(), &root) {
+                    return;
+                }
                 event.prevent_default();
                 let _ = focus_scope_cycle(&root, &document_focus, event.shift_key());
             }) as Box<dyn FnMut(_)>);
@@ -209,6 +216,7 @@ where
             mounted.set(true);
             return;
         };
+        let _ = root.set_attribute(FOCUS_SCOPE_ATTR, "");
 
         if auto_focus {
             let _ = focus_scope_focus_first(&root, &document);
@@ -259,27 +267,39 @@ where
 }
 
 #[cfg(target_arch = "wasm32")]
+fn focus_event_target_is_owned_by_scope(
+    target: Option<web_sys::EventTarget>,
+    root: &web_sys::Element,
+) -> bool {
+    use wasm_bindgen::JsCast;
+
+    let Some(target) = target.and_then(|target| target.dyn_into::<web_sys::Element>().ok()) else {
+        return false;
+    };
+    let closest_scope = target.closest(FOCUS_SCOPE_MARKER_SELECTOR).ok().flatten();
+
+    closest_scope
+        .as_ref()
+        .is_some_and(|scope| scope.is_same_node(Some(root)))
+}
+
+#[cfg(target_arch = "wasm32")]
 fn focus_scope_focus_first(
     root: &web_sys::Element,
     document: &web_sys::Document,
 ) -> Result<(), ()> {
-    let list = root
-        .query_selector_all(FOCUSABLE_SELECTOR)
-        .map_err(|_| ())?;
-    if list.length() == 0 {
+    let elements = focus_scope_tabbable_elements(root)?;
+    if elements.is_empty() {
         if let Some(element) = root.dyn_ref::<web_sys::HtmlElement>() {
             let _ = element.focus();
         }
         return Ok(());
     }
-    let first = list
-        .item(0)
-        .and_then(|node| node.dyn_into::<web_sys::HtmlElement>().ok())
-        .or_else(|| {
-            document
-                .active_element()
-                .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok())
-        });
+    let first = elements.into_iter().next().or_else(|| {
+        document
+            .active_element()
+            .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok())
+    });
     if let Some(element) = first {
         let _ = element.focus();
     }
@@ -292,10 +312,8 @@ fn focus_scope_cycle(
     document: &web_sys::Document,
     shift: bool,
 ) -> Result<(), ()> {
-    let list = root
-        .query_selector_all(FOCUSABLE_SELECTOR)
-        .map_err(|_| ())?;
-    let count = list.length() as usize;
+    let elements = focus_scope_tabbable_elements(root)?;
+    let count = elements.len();
     if count == 0 {
         return Ok(());
     }
@@ -303,25 +321,126 @@ fn focus_scope_cycle(
     let mut current_index = None;
     if let Some(active) = active {
         for index in 0..count {
-            let candidate = list
-                .item(index as u32)
-                .and_then(|node| node.dyn_into::<web_sys::Element>().ok());
-            if let Some(candidate) = candidate {
-                if active.is_same_node(Some(&candidate)) {
-                    current_index = Some(index);
-                    break;
-                }
+            if active.is_same_node(Some(&elements[index])) {
+                current_index = Some(index);
+                break;
             }
         }
     }
     let next_index = focus_scope_target_index(current_index, count, shift);
-    if let Some(next) = list
-        .item(next_index as u32)
-        .and_then(|node| node.dyn_into::<web_sys::HtmlElement>().ok())
-    {
+    if let Some(next) = elements.get(next_index) {
         let _ = next.focus();
     }
     Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_tabbable_elements(root: &web_sys::Element) -> Result<Vec<web_sys::HtmlElement>, ()> {
+    let list = root
+        .query_selector_all(FOCUSABLE_SELECTOR)
+        .map_err(|_| ())?;
+    let mut elements = Vec::new();
+
+    for index in 0..list.length() {
+        let Some(element) = list
+            .item(index)
+            .and_then(|node| node.dyn_into::<web_sys::Element>().ok())
+        else {
+            continue;
+        };
+        if !focus_scope_candidate_is_tabbable(root, &element) {
+            continue;
+        }
+        if let Ok(element) = element.dyn_into::<web_sys::HtmlElement>() {
+            elements.push(element);
+        }
+    }
+
+    Ok(elements)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_is_tabbable(root: &web_sys::Element, element: &web_sys::Element) -> bool {
+    focus_scope_candidate_belongs_to_scope(root, element)
+        && !focus_scope_candidate_is_disabled(element)
+        && !focus_scope_candidate_has_negative_tabindex(element)
+        && !focus_scope_candidate_has_hidden_ancestor(root, element)
+        && focus_scope_candidate_has_layout_box(element)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_belongs_to_scope(
+    root: &web_sys::Element,
+    element: &web_sys::Element,
+) -> bool {
+    let closest_scope = element.closest(FOCUS_SCOPE_MARKER_SELECTOR).ok().flatten();
+
+    closest_scope
+        .as_ref()
+        .is_some_and(|scope| scope.is_same_node(Some(root)))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_is_disabled(element: &web_sys::Element) -> bool {
+    element.matches(":disabled").unwrap_or(false) || element.has_attribute("disabled")
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_has_negative_tabindex(element: &web_sys::Element) -> bool {
+    element
+        .get_attribute("tabindex")
+        .as_deref()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .is_some_and(|value| value < 0)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_has_hidden_ancestor(
+    root: &web_sys::Element,
+    element: &web_sys::Element,
+) -> bool {
+    let mut current = Some(element.clone());
+
+    while let Some(candidate) = current {
+        if candidate.has_attribute("hidden")
+            || candidate.has_attribute("inert")
+            || candidate
+                .get_attribute("aria-hidden")
+                .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+            || focus_scope_element_has_non_visible_style(&candidate)
+        {
+            return true;
+        }
+
+        if candidate.is_same_node(Some(root)) {
+            return false;
+        }
+
+        current = candidate.parent_element();
+    }
+
+    true
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_element_has_non_visible_style(element: &web_sys::Element) -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let Ok(Some(style)) = window.get_computed_style(element) else {
+        return false;
+    };
+    let display = style.get_property_value("display").unwrap_or_default();
+    let visibility = style.get_property_value("visibility").unwrap_or_default();
+
+    display == "none" || matches!(visibility.as_str(), "hidden" | "collapse")
+}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_scope_candidate_has_layout_box(element: &web_sys::Element) -> bool {
+    element
+        .dyn_ref::<web_sys::HtmlElement>()
+        .is_none_or(|element| element.offset_width() > 0 || element.offset_height() > 0)
 }
 
 #[cfg(test)]
