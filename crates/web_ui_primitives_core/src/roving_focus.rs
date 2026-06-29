@@ -3,6 +3,8 @@
 //! [`TabsModel`](crate::TabsModel) uses this internally, but the type remains
 //! public for advanced widgets that need roving keyboard focus behavior.
 
+use crate::orientation::Direction;
+
 /// Index-based roving focus state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RovingFocus {
@@ -32,6 +34,7 @@ pub enum RovingFocusAction {
 pub fn roving_focus_action_from_key(
     key: &str,
     orientation: RovingFocusOrientation,
+    direction: Direction,
 ) -> Option<RovingFocusAction> {
     match key {
         "Home" => Some(RovingFocusAction::First),
@@ -40,12 +43,18 @@ pub fn roving_focus_action_from_key(
             orientation,
             RovingFocusOrientation::Horizontal | RovingFocusOrientation::Both
         )
-        .then_some(RovingFocusAction::Prev),
+        .then_some(match direction {
+            Direction::Ltr => RovingFocusAction::Prev,
+            Direction::Rtl => RovingFocusAction::Next,
+        }),
         "ArrowRight" => matches!(
             orientation,
             RovingFocusOrientation::Horizontal | RovingFocusOrientation::Both
         )
-        .then_some(RovingFocusAction::Next),
+        .then_some(match direction {
+            Direction::Ltr => RovingFocusAction::Next,
+            Direction::Rtl => RovingFocusAction::Prev,
+        }),
         "ArrowUp" => matches!(
             orientation,
             RovingFocusOrientation::Vertical | RovingFocusOrientation::Both
@@ -212,6 +221,8 @@ impl RovingFocus {
 
 #[cfg(test)]
 mod tests {
+    use crate::orientation::Direction;
+
     use super::{
         RovingFocus, RovingFocusAction, RovingFocusOrientation, roving_focus_action_from_key,
         roving_focus_next_index,
@@ -241,16 +252,52 @@ mod tests {
     #[test]
     fn roving_focus_action_maps_arrows() {
         assert_eq!(
-            roving_focus_action_from_key("ArrowLeft", RovingFocusOrientation::Horizontal),
+            roving_focus_action_from_key(
+                "ArrowLeft",
+                RovingFocusOrientation::Horizontal,
+                Direction::Ltr
+            ),
             Some(RovingFocusAction::Prev)
         );
         assert_eq!(
-            roving_focus_action_from_key("ArrowUp", RovingFocusOrientation::Horizontal),
+            roving_focus_action_from_key(
+                "ArrowUp",
+                RovingFocusOrientation::Horizontal,
+                Direction::Ltr
+            ),
             None
         );
         assert_eq!(
-            roving_focus_action_from_key("ArrowDown", RovingFocusOrientation::Both),
+            roving_focus_action_from_key("ArrowDown", RovingFocusOrientation::Both, Direction::Ltr),
             Some(RovingFocusAction::Next)
+        );
+    }
+
+    #[test]
+    fn roving_focus_horizontal_arrows_follow_direction() {
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowLeft",
+                RovingFocusOrientation::Horizontal,
+                Direction::Rtl
+            ),
+            Some(RovingFocusAction::Next)
+        );
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowRight",
+                RovingFocusOrientation::Horizontal,
+                Direction::Rtl
+            ),
+            Some(RovingFocusAction::Prev)
+        );
+        assert_eq!(
+            roving_focus_action_from_key(
+                "ArrowUp",
+                RovingFocusOrientation::Vertical,
+                Direction::Rtl
+            ),
+            Some(RovingFocusAction::Prev)
         );
     }
 

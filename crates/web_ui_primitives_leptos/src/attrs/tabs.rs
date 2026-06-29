@@ -4,6 +4,71 @@ use crate::DomAttribute;
 use web_ui_primitives_core::orientation::Orientation;
 use web_ui_primitives_core::tabs::TabsModel;
 
+/// Element contract for tab trigger attributes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabsTriggerElement {
+    Button,
+    Generic,
+}
+
+/// Disabled-state policy for tab trigger attributes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabsTriggerDisabledPolicy {
+    Native,
+    Aria,
+}
+
+/// Attribute options for a tab trigger.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TabsTriggerAttrs<'a> {
+    trigger_id: Option<&'a str>,
+    controls_id: Option<&'a str>,
+    element: TabsTriggerElement,
+    disabled_policy: TabsTriggerDisabledPolicy,
+}
+
+impl Default for TabsTriggerAttrs<'_> {
+    fn default() -> Self {
+        Self {
+            trigger_id: None,
+            controls_id: None,
+            element: TabsTriggerElement::Button,
+            disabled_policy: TabsTriggerDisabledPolicy::Native,
+        }
+    }
+}
+
+impl<'a> TabsTriggerAttrs<'a> {
+    /// Creates tab trigger attribute options.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the tab trigger `id`.
+    pub fn trigger_id(mut self, trigger_id: &'a str) -> Self {
+        self.trigger_id = Some(trigger_id);
+        self
+    }
+
+    /// Sets the controlled panel id.
+    pub fn controls_id(mut self, controls_id: &'a str) -> Self {
+        self.controls_id = Some(controls_id);
+        self
+    }
+
+    /// Sets the trigger element contract.
+    pub fn element(mut self, element: TabsTriggerElement) -> Self {
+        self.element = element;
+        self
+    }
+
+    /// Sets the disabled-state policy.
+    pub fn disabled_policy(mut self, disabled_policy: TabsTriggerDisabledPolicy) -> Self {
+        self.disabled_policy = disabled_policy;
+        self
+    }
+}
+
 /// Returns container attributes for a tabs list element.
 pub fn tabs_list_attrs(orientation: Orientation) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
@@ -24,14 +89,16 @@ pub fn tabs_list_attrs(orientation: Orientation) -> Vec<DomAttribute> {
 pub fn tabs_trigger_attrs(
     model: &TabsModel,
     index: usize,
-    trigger_id: Option<&str>,
-    controls_id: Option<&str>,
+    options: TabsTriggerAttrs<'_>,
 ) -> Vec<DomAttribute> {
     let mut attrs = Vec::new();
     let selected = model.selected() == Some(index);
     let focused = model.focused() == Some(index);
     let disabled = model.disabled(index);
     attrs.push(DomAttribute::string("role", "tab"));
+    if options.element == TabsTriggerElement::Button {
+        attrs.push(DomAttribute::string("type", "button"));
+    }
     attrs.push(DomAttribute::string(
         "aria-selected",
         if selected { "true" } else { "false" },
@@ -44,15 +111,19 @@ pub fn tabs_trigger_attrs(
         "tabindex",
         if focused && !disabled { "0" } else { "-1" },
     ));
-    attrs.push(DomAttribute::bool("disabled", disabled));
+    if options.element == TabsTriggerElement::Button
+        && options.disabled_policy == TabsTriggerDisabledPolicy::Native
+    {
+        attrs.push(DomAttribute::bool("disabled", disabled));
+    }
     if disabled {
         attrs.push(DomAttribute::string("aria-disabled", "true"));
         attrs.push(DomAttribute::bool("data-disabled", true));
     }
-    if let Some(id) = trigger_id {
+    if let Some(id) = options.trigger_id {
         attrs.push(DomAttribute::string("id", id));
     }
-    if let Some(controls) = controls_id {
+    if let Some(controls) = options.controls_id {
         attrs.push(DomAttribute::string("aria-controls", controls));
     }
     attrs
@@ -81,7 +152,10 @@ pub fn tabs_panel_attrs(
 
 #[cfg(test)]
 mod tests {
-    use super::{tabs_list_attrs, tabs_panel_attrs, tabs_trigger_attrs};
+    use super::{
+        TabsTriggerAttrs, TabsTriggerDisabledPolicy, TabsTriggerElement, tabs_list_attrs,
+        tabs_panel_attrs, tabs_trigger_attrs,
+    };
     use crate::DomAttributeValue;
     use web_ui_primitives_core::orientation::Orientation;
     use web_ui_primitives_core::tabs::TabsModel;
@@ -95,7 +169,7 @@ mod tests {
     #[test]
     fn trigger_attrs_selected_state() {
         let model = TabsModel::new(2);
-        let attrs = tabs_trigger_attrs(&model, 0, None, None);
+        let attrs = tabs_trigger_attrs(&model, 0, TabsTriggerAttrs::new());
         let state = attrs
             .iter()
             .find(|attr| attr.name() == "data-state")
@@ -110,7 +184,7 @@ mod tests {
     fn trigger_attrs_reflect_model_disabled_state() {
         let mut model = TabsModel::new(2);
         model.set_disabled(1, true);
-        let attrs = tabs_trigger_attrs(&model, 1, None, None);
+        let attrs = tabs_trigger_attrs(&model, 1, TabsTriggerAttrs::new());
         let disabled = attrs
             .iter()
             .find(|attr| attr.name() == "disabled")
@@ -124,6 +198,56 @@ mod tests {
             tabindex.value(),
             &DomAttributeValue::String("-1".to_string())
         );
+        assert!(attrs.iter().any(|attr| attr.name() == "aria-disabled"));
+    }
+
+    #[test]
+    fn trigger_attrs_include_native_button_contract_by_default() {
+        let model = TabsModel::new(2);
+        let attrs = tabs_trigger_attrs(
+            &model,
+            0,
+            TabsTriggerAttrs::new()
+                .trigger_id("tab-a")
+                .controls_id("panel-a"),
+        );
+        assert!(attrs.iter().any(|attr| {
+            attr.name() == "type"
+                && attr.value() == &DomAttributeValue::String("button".to_string())
+        }));
+        assert!(attrs.iter().any(|attr| {
+            attr.name() == "id" && attr.value() == &DomAttributeValue::String("tab-a".to_string())
+        }));
+        assert!(attrs.iter().any(|attr| {
+            attr.name() == "aria-controls"
+                && attr.value() == &DomAttributeValue::String("panel-a".to_string())
+        }));
+    }
+
+    #[test]
+    fn trigger_attrs_can_use_aria_disabled_policy_for_buttons() {
+        let mut model = TabsModel::new(2);
+        model.set_disabled(1, true);
+        let attrs = tabs_trigger_attrs(
+            &model,
+            1,
+            TabsTriggerAttrs::new().disabled_policy(TabsTriggerDisabledPolicy::Aria),
+        );
+        assert!(!attrs.iter().any(|attr| attr.name() == "disabled"));
+        assert!(attrs.iter().any(|attr| attr.name() == "aria-disabled"));
+    }
+
+    #[test]
+    fn trigger_attrs_can_target_generic_elements() {
+        let mut model = TabsModel::new(2);
+        model.set_disabled(1, true);
+        let attrs = tabs_trigger_attrs(
+            &model,
+            1,
+            TabsTriggerAttrs::new().element(TabsTriggerElement::Generic),
+        );
+        assert!(!attrs.iter().any(|attr| attr.name() == "type"));
+        assert!(!attrs.iter().any(|attr| attr.name() == "disabled"));
         assert!(attrs.iter().any(|attr| attr.name() == "aria-disabled"));
     }
 

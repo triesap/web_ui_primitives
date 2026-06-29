@@ -1,11 +1,29 @@
 use alloc::vec::Vec;
 
-use crate::roving_focus::RovingFocus;
+use crate::orientation::{Direction, Orientation};
+use crate::roving_focus::{
+    RovingFocus, RovingFocusAction, RovingFocusOrientation, roving_focus_action_from_key,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabsActivation {
     Automatic,
     Manual,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabsLoop {
+    Wrap,
+    Clamp,
+}
+
+impl TabsLoop {
+    fn as_looped(self) -> bool {
+        match self {
+            Self::Wrap => true,
+            Self::Clamp => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,6 +43,14 @@ impl TabsModel {
         Self::with_activation_and_disabled(len, activation, [])
     }
 
+    pub fn with_activation_and_loop(
+        len: usize,
+        activation: TabsActivation,
+        loop_policy: TabsLoop,
+    ) -> Self {
+        Self::with_activation_loop_and_disabled(len, activation, loop_policy, [])
+    }
+
     pub fn with_activation_and_disabled<I>(
         len: usize,
         activation: TabsActivation,
@@ -33,9 +59,21 @@ impl TabsModel {
     where
         I: IntoIterator<Item = bool>,
     {
+        Self::with_activation_loop_and_disabled(len, activation, TabsLoop::Wrap, disabled)
+    }
+
+    pub fn with_activation_loop_and_disabled<I>(
+        len: usize,
+        activation: TabsActivation,
+        loop_policy: TabsLoop,
+        disabled: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = bool>,
+    {
         let disabled = normalize_disabled(len, disabled);
         let initial = first_enabled_index(&disabled);
-        let focus = RovingFocus::with_active(len, initial, true);
+        let focus = RovingFocus::with_active(len, initial, loop_policy.as_looped());
         Self {
             focus,
             selected: initial,
@@ -58,6 +96,18 @@ impl TabsModel {
 
     pub fn activation(&self) -> TabsActivation {
         self.activation
+    }
+
+    pub fn loop_policy(&self) -> TabsLoop {
+        if self.focus.looped() {
+            TabsLoop::Wrap
+        } else {
+            TabsLoop::Clamp
+        }
+    }
+
+    pub fn set_loop_policy(&mut self, loop_policy: TabsLoop) {
+        self.focus.set_looped(loop_policy.as_looped());
     }
 
     pub fn set_activation(&mut self, activation: TabsActivation) {
@@ -136,6 +186,20 @@ impl TabsModel {
         focused
     }
 
+    pub fn focus_by_key(
+        &mut self,
+        key: &str,
+        orientation: Orientation,
+        direction: Direction,
+    ) -> Option<usize> {
+        let orientation = match orientation {
+            Orientation::Horizontal => RovingFocusOrientation::Horizontal,
+            Orientation::Vertical => RovingFocusOrientation::Vertical,
+        };
+        let action = roving_focus_action_from_key(key, orientation, direction)?;
+        self.focus_action(action)
+    }
+
     pub fn select(&mut self, index: Option<usize>) -> Option<usize> {
         self.selected = match index {
             Some(index) if self.is_enabled_index(index) => Some(index),
@@ -209,8 +273,19 @@ impl TabsModel {
 
     fn move_focus(&mut self, forward: bool) -> Option<usize> {
         let next = self.next_enabled_index(self.focus.active(), forward);
-        self.focus.set_active(next);
+        if let Some(index) = next {
+            self.focus.set_active(Some(index));
+        }
         next
+    }
+
+    fn focus_action(&mut self, action: RovingFocusAction) -> Option<usize> {
+        match action {
+            RovingFocusAction::Next => self.focus_next(),
+            RovingFocusAction::Prev => self.focus_prev(),
+            RovingFocusAction::First => self.focus_first(),
+            RovingFocusAction::Last => self.focus_last(),
+        }
     }
 
     fn next_enabled_index(&self, current: Option<usize>, forward: bool) -> Option<usize> {
@@ -309,7 +384,9 @@ fn last_enabled_index(disabled: &[bool]) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{TabsActivation, TabsModel};
+    use crate::orientation::{Direction, Orientation};
+
+    use super::{TabsActivation, TabsLoop, TabsModel};
 
     #[test]
     fn tabs_auto_activation_tracks_focus() {
@@ -398,5 +475,63 @@ mod tests {
         model.set_activation(TabsActivation::Automatic);
         assert_eq!(model.focused(), Some(1));
         assert_eq!(model.selected(), Some(1));
+    }
+
+    #[test]
+    fn tabs_loop_policy_can_clamp_focus_at_edges() {
+        let mut model =
+            TabsModel::with_activation_and_loop(3, TabsActivation::Manual, TabsLoop::Clamp);
+        assert_eq!(model.loop_policy(), TabsLoop::Clamp);
+        assert_eq!(model.focus_prev(), None);
+        assert_eq!(model.focused(), Some(0));
+        model.set_loop_policy(TabsLoop::Wrap);
+        assert_eq!(model.focus_prev(), Some(2));
+    }
+
+    #[test]
+    fn tabs_focus_by_key_follows_horizontal_direction() {
+        let mut model = TabsModel::with_activation(3, TabsActivation::Manual);
+        assert_eq!(
+            model.focus_by_key("ArrowRight", Orientation::Horizontal, Direction::Ltr),
+            Some(1)
+        );
+        assert_eq!(
+            model.focus_by_key("ArrowRight", Orientation::Horizontal, Direction::Rtl),
+            Some(0)
+        );
+        assert_eq!(
+            model.focus_by_key("ArrowLeft", Orientation::Horizontal, Direction::Rtl),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn tabs_focus_by_key_keeps_vertical_arrows_physical() {
+        let mut model = TabsModel::with_activation(3, TabsActivation::Manual);
+        assert_eq!(
+            model.focus_by_key("ArrowDown", Orientation::Vertical, Direction::Rtl),
+            Some(1)
+        );
+        assert_eq!(
+            model.focus_by_key("ArrowUp", Orientation::Vertical, Direction::Rtl),
+            Some(0)
+        );
+        assert_eq!(
+            model.focus_by_key("ArrowRight", Orientation::Vertical, Direction::Rtl),
+            None
+        );
+    }
+
+    #[test]
+    fn tabs_focus_by_key_skips_disabled_items() {
+        let mut model = TabsModel::with_activation_and_disabled(
+            4,
+            TabsActivation::Manual,
+            [false, true, true, false],
+        );
+        assert_eq!(
+            model.focus_by_key("ArrowRight", Orientation::Horizontal, Direction::Ltr),
+            Some(3)
+        );
     }
 }

@@ -1,4 +1,16 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Ltr,
+    Rtl,
+}
+
+impl Default for Direction {
+    fn default() -> Self {
+        Self::Ltr
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Orientation {
     Horizontal,
     Vertical,
@@ -21,7 +33,12 @@ impl Default for Orientation {
 
 #[cfg(test)]
 mod tests {
-    use super::Orientation;
+    use super::{Direction, Orientation};
+
+    #[test]
+    fn direction_defaults_to_ltr() {
+        assert_eq!(Direction::default(), Direction::Ltr);
+    }
 
     #[test]
     fn orientation_aria_value() {
