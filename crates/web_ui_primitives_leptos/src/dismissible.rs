@@ -1,6 +1,5 @@
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
-use std::{cell::Cell, rc::Rc};
 
 use leptos::ev::{FocusEvent, KeyboardEvent, PointerEvent};
 use leptos::html;
@@ -83,14 +82,14 @@ pub fn DismissibleLayer(
     let node_ref = NodeRef::<html::Div>::new();
     let disable_pointer_down_outside_dismiss =
         pointer_down_outside_dismiss_disabled(disable_pointer_down_outside_dismiss);
-    let layer_id = Rc::new(Cell::new(None::<u64>));
+
+    #[cfg(target_arch = "wasm32")]
+    let layer_id = dismissible_layer_register();
+    #[cfg(not(target_arch = "wasm32"))]
+    let layer_id = 0;
 
     let on_keydown = {
-        let layer_id = Rc::clone(&layer_id);
         move |event: KeyboardEvent| {
-            let Some(layer_id) = layer_id.get() else {
-                return;
-            };
             if !dismissible_layer_is_topmost(layer_id) {
                 return;
             }
@@ -115,31 +114,26 @@ pub fn DismissibleLayer(
         let on_dismiss = on_dismiss.clone();
         let on_pointer_down_outside = on_pointer_down_outside.clone();
         let on_focus_outside = on_focus_outside.clone();
-        let layer_id = Rc::clone(&layer_id);
         let node_ref = node_ref;
 
-        node_ref.on_load(move |root| {
-            let document = match web_sys::window().and_then(|window| window.document()) {
-                Some(document) => document,
-                None => return,
-            };
-            let id = dismissible_layer_register();
-            layer_id.set(Some(id));
+        let document = web_sys::window().and_then(|window| window.document());
 
+        if let Some(document) = document.clone() {
             if !disable_pointer_down_outside_dismiss {
-                let root_pointer = root.clone();
                 let on_dismiss = on_dismiss.clone();
                 let on_pointer_down_outside = on_pointer_down_outside.clone();
+                let pointer_node_ref = node_ref;
                 let handler = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
-                    if !dismissible_layer_is_topmost(id) {
+                    if !dismissible_layer_is_topmost(layer_id) {
                         return;
                     }
                     let target = event
                         .target()
                         .and_then(|target| target.dyn_into::<web_sys::Node>().ok());
+                    let root = pointer_node_ref.get_untracked();
                     let is_inside = target
                         .as_ref()
-                        .map(|node| root_pointer.contains(Some(node)))
+                        .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
                         .unwrap_or(false);
                     if dismissible_is_outside(is_inside) {
                         if let Some(callback) = on_pointer_down_outside.as_ref() {
@@ -166,19 +160,18 @@ pub fn DismissibleLayer(
                 });
             }
 
-            let root_focus = root.clone();
-            let on_dismiss = on_dismiss.clone();
-            let on_focus_outside = on_focus_outside.clone();
+            let focus_node_ref = node_ref;
             let focus_handler = Closure::wrap(Box::new(move |event: web_sys::FocusEvent| {
-                if !dismissible_layer_is_topmost(id) {
+                if !dismissible_layer_is_topmost(layer_id) {
                     return;
                 }
                 let target = event
                     .target()
                     .and_then(|target| target.dyn_into::<web_sys::Node>().ok());
+                let root = focus_node_ref.get_untracked();
                 let is_inside = target
                     .as_ref()
-                    .map(|node| root_focus.contains(Some(node)))
+                    .and_then(|node| root.as_ref().map(|root| root.contains(Some(node))))
                     .unwrap_or(false);
                 if dismissible_is_outside(is_inside) {
                     if let Some(callback) = on_focus_outside.as_ref() {
@@ -203,10 +196,10 @@ pub fn DismissibleLayer(
                     handler.as_ref().unchecked_ref(),
                 );
             });
+        }
 
-            on_cleanup(move || {
-                dismissible_layer_unregister(id);
-            });
+        on_cleanup(move || {
+            dismissible_layer_unregister(layer_id);
         });
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -214,7 +207,6 @@ pub fn DismissibleLayer(
         let _ = on_pointer_down_outside;
         let _ = on_focus_outside;
         let _ = disable_pointer_down_outside_dismiss;
-        let _ = layer_id;
     }
 
     view! {

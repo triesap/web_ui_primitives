@@ -225,36 +225,9 @@ pub fn Presence(
         PresenceState::Unmounted
     });
     #[cfg(target_arch = "wasm32")]
-    let root_element = Arc::new(Mutex::new(
-        None::<send_wrapper::SendWrapper<web_sys::Element>>,
-    ));
-    #[cfg(target_arch = "wasm32")]
     let exit_timeout = Arc::new(Mutex::new(None::<PresenceExitTimeout>));
 
     let on_exit_complete = on_exit_complete.clone();
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::JsCast;
-
-        let root_element_handle = Arc::clone(&root_element);
-        let exit_timeout_handle = Arc::clone(&exit_timeout);
-        node_ref.on_load(move |root| {
-            if let Ok(element) = root.dyn_into::<web_sys::Element>() {
-                *root_element_handle
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner()) =
-                    Some(send_wrapper::SendWrapper::new(element));
-            }
-            let root_element_handle = Arc::clone(&root_element_handle);
-            let exit_timeout_handle = Arc::clone(&exit_timeout_handle);
-            on_cleanup(move || {
-                *root_element_handle
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
-                presence_clear_exit_timeout(&exit_timeout_handle);
-            });
-        });
-    }
 
     #[cfg(target_arch = "wasm32")]
     let exit_timeout_for_end_handler = Arc::clone(&exit_timeout);
@@ -274,14 +247,12 @@ pub fn Presence(
         }
     });
 
-    Effect::new({
+    let effect = RenderEffect::new({
         let end_handler = Arc::clone(&end_handler);
-        #[cfg(target_arch = "wasm32")]
-        let root_element = Arc::clone(&root_element);
         #[cfg(target_arch = "wasm32")]
         let exit_timeout = Arc::clone(&exit_timeout);
 
-        move || {
+        move |_| {
             let current = state.get();
             let is_present = present.get();
 
@@ -301,11 +272,13 @@ pub fn Presence(
             }
 
             #[cfg(target_arch = "wasm32")]
-            let exit_timeout_ms = root_element
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
+            let exit_timeout_ms = node_ref
+                .get_untracked()
                 .as_ref()
-                .map(|root| presence_exit_timeout_ms(&*root))
+                .map(|root| {
+                    let element: web_sys::Element = root.clone().into();
+                    presence_exit_timeout_ms(&element)
+                })
                 .unwrap_or(0);
             #[cfg(not(target_arch = "wasm32"))]
             let exit_timeout_ms = 0;
@@ -327,6 +300,19 @@ pub fn Presence(
                 Arc::clone(&end_handler),
             );
         }
+    });
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let exit_timeout = Arc::clone(&exit_timeout);
+        on_cleanup(move || {
+            presence_clear_exit_timeout(&exit_timeout);
+            drop(effect);
+        });
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    on_cleanup(move || {
+        drop(effect);
     });
 
     let render = move || -> AnyView {

@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use leptos::portal::Portal as LeptosPortal;
+use wasm_bindgen::JsCast;
 
 /// Mount target used by [`Portal`].
 ///
@@ -25,15 +25,38 @@ pub type PortalMount = ();
 pub fn Portal(#[prop(optional)] mount: Option<PortalMount>, children: ChildrenFn) -> impl IntoView {
     #[cfg(target_arch = "wasm32")]
     {
-        match mount {
-            Some(mount) => view! { <LeptosPortal mount=mount>{children()}</LeptosPortal> },
-            None => view! { <LeptosPortal>{children()}</LeptosPortal> },
-        }
+        use leptos::mount::mount_to;
+        use send_wrapper::SendWrapper;
+
+        let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+            return ().into_any();
+        };
+        let Some(target) = mount.or_else(|| document.body().map(Into::into)) else {
+            return ().into_any();
+        };
+        let Ok(container) = document.create_element("div") else {
+            return ().into_any();
+        };
+        let html_container = container.clone().unchecked_into::<web_sys::HtmlElement>();
+        let _ = target.append_child(&container);
+
+        let handle = SendWrapper::new((
+            mount_to(html_container, move || children()),
+            target,
+            container,
+        ));
+        on_cleanup(move || {
+            let (handle, target, container) = handle.take();
+            drop(handle);
+            let _ = target.remove_child(&container);
+        });
+
+        ().into_any()
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = mount;
-        children()
+        children().into_any()
     }
 }
 

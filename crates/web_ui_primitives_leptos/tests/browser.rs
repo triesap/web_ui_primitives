@@ -25,6 +25,10 @@ fn body() -> web_sys::HtmlElement {
     document().body().expect("body")
 }
 
+async fn render_tick() {
+    TimeoutFuture::new(0).await;
+}
+
 fn append_div(id: &str) -> web_sys::HtmlElement {
     let element = document()
         .create_element("div")
@@ -154,7 +158,7 @@ fn scroll_y() -> f64 {
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown() {
+async fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown() {
     let host = append_div("dismissible-host");
     let outside = append_div("dismissible-outside");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -178,21 +182,24 @@ fn dismissible_layer_ignores_inside_pointerdown_and_reports_outside_pointerdown(
         .expect("inside html element");
 
     dispatch_pointer_down(&inside);
+    render_tick().await;
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
         &[DismissibleReason::PointerDownOutside]
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
+async fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
     let host = append_div("dismissible-escape-host");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
     let dismissals_handle = Arc::clone(&dismissals);
@@ -222,6 +229,7 @@ fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
 
     let inside = html_element_by_id("dismissible-escape-inside");
     let escape = dispatch_escape_keydown(&inside);
+    render_tick().await;
 
     assert!(!escape.default_prevented());
     assert_eq!(
@@ -234,11 +242,12 @@ fn dismissible_layer_reports_escape_to_callback_and_dismiss_reason() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
+async fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
     let host = append_div("dismissible-combined-host");
     let outside = append_div("dismissible-combined-outside");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -259,7 +268,9 @@ fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
     let inside = html_element_by_id("dismissible-combined-inside");
 
     dispatch_escape_keydown(&inside);
+    render_tick().await;
     dispatch_pointer_down(&outside);
+    render_tick().await;
 
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -270,12 +281,13 @@ fn dismissible_layer_handles_escape_and_pointer_outside_in_live_dom() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_ignores_focus_moves_within_the_layer() {
+async fn dismissible_layer_ignores_focus_moves_within_the_layer() {
     let host = append_div("dismissible-focus-inside-host");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
     let dismissals_handle = Arc::clone(&dismissals);
@@ -313,17 +325,20 @@ fn dismissible_layer_ignores_focus_moves_within_the_layer() {
     let second = html_element_by_id("dismissible-focus-second");
 
     first.focus().expect("focus first");
+    render_tick().await;
     second.focus().expect("focus second");
+    render_tick().await;
 
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
     assert!(focus_targets.lock().expect("focus targets lock").is_empty());
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
+async fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
     let host = append_div("dismissible-focus-outside-host");
     let outside = append_button("dismissible-focus-outside-target");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -360,10 +375,12 @@ fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
     let inside = html_element_by_id("dismissible-focus-inside");
 
     inside.focus().expect("focus inside");
+    render_tick().await;
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
     assert!(focus_targets.lock().expect("focus targets lock").is_empty());
 
     outside.focus().expect("focus outside");
+    render_tick().await;
 
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -375,12 +392,13 @@ fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
+async fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
     let host = append_div("dismissible-pointer-disabled-host");
     let outside = append_div("dismissible-pointer-disabled-outside");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -416,6 +434,7 @@ fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
     });
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
 
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
     assert!(
@@ -426,12 +445,14 @@ fn dismissible_layer_suppresses_pointer_outside_when_disabled() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_is_disabled() {
+async fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_is_disabled()
+{
     let host = append_div("dismissible-pointer-disabled-combined-host");
     let outside = append_button("dismissible-pointer-disabled-focus-target");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -469,9 +490,13 @@ fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_
     let inside = html_element_by_id("dismissible-pointer-disabled-combined-inside");
 
     inside.focus().expect("focus inside");
+    render_tick().await;
     dispatch_escape_keydown(&inside);
+    render_tick().await;
     dispatch_pointer_down(&outside);
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
 
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -483,12 +508,13 @@ fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_dismiss_
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
+async fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
     let host = append_div("dismissible-callback-pointer-host");
     let outside = append_div("dismissible-callback-pointer-outside");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -546,6 +572,7 @@ fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
     });
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
 
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -562,12 +589,13 @@ fn dismissible_layer_routes_pointer_outside_only_to_matching_callbacks() {
     assert!(escape_keys.lock().expect("escape keys lock").is_empty());
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
+async fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
     let host = append_div("dismissible-callback-focus-host");
     let outside = append_button("dismissible-callback-focus-outside");
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -627,9 +655,13 @@ fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
     let inside = html_element_by_id("dismissible-callback-focus-inside");
 
     inside.focus().expect("focus inside");
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
     inside.focus().expect("restore focus inside");
+    render_tick().await;
     dispatch_escape_keydown(&inside);
+    render_tick().await;
 
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -651,12 +683,13 @@ fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_layer() {
+async fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_layer() {
     let host = append_div("dismissible-stack-host");
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
     let outer_dismissals_handle = Arc::clone(&outer_dismissals);
@@ -693,6 +726,7 @@ fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_laye
     let outer_only = html_element_by_id("dismissible-stack-outer-only");
 
     dispatch_pointer_down(&outer_only);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -709,7 +743,9 @@ fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_laye
     );
 
     inner.focus().expect("focus inner");
+    render_tick().await;
     outer_only.focus().expect("focus outer only");
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -729,11 +765,12 @@ fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmost_laye
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
+async fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
     let host = append_div("dismissible-stack-escape-host");
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
     let outer_dismissals_handle = Arc::clone(&outer_dismissals);
@@ -767,6 +804,7 @@ fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
 
     let inner = html_element_by_id("dismissible-stack-escape-inner");
     dispatch_escape_keydown(&inner);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -783,11 +821,12 @@ fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount() {
+async fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount() {
     let host = append_div("dismissible-stack-restore-host");
     let outside = append_button("dismissible-stack-restore-outside");
     let inner_present = RwSignal::new(true);
@@ -833,6 +872,7 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
     let outer = html_element_by_id("dismissible-stack-restore-outer");
 
     dispatch_pointer_down(&outer);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -854,6 +894,7 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
     );
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
     assert_eq!(
         outer_dismissals
             .lock()
@@ -863,7 +904,9 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
     );
 
     outer.focus().expect("focus outer");
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
     assert_eq!(
         outer_dismissals
             .lock()
@@ -883,12 +926,13 @@ fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
+async fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     let host = append_div("dismissible-stack-restore-escape-host");
     let inner_present = RwSignal::new(true);
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -932,6 +976,7 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
 
     let inner = html_element_by_id("dismissible-stack-restore-escape-inner");
     dispatch_escape_keydown(&inner);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -954,7 +999,9 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
 
     let outer = html_element_by_id("dismissible-stack-restore-escape-outer");
     outer.focus().expect("focus outer");
+    render_tick().await;
     dispatch_escape_keydown(&outer);
+    render_tick().await;
 
     assert_eq!(
         outer_dismissals
@@ -972,11 +1019,12 @@ fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmost_pointer_dismiss_is_disabled()
+async fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmost_pointer_dismiss_is_disabled()
  {
     let host = append_div("dismissible-stack-suppressed-pointer-host");
     let outside = append_div("dismissible-stack-suppressed-pointer-outside");
@@ -1048,6 +1096,7 @@ fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmo
     });
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1075,12 +1124,13 @@ fn stacked_dismissible_layers_suppress_pointer_outside_for_all_layers_when_topmo
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppressed_layer() {
+async fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppressed_layer() {
     let host = append_div("dismissible-stack-suppressed-ownership-host");
     let outside = append_button("dismissible-stack-suppressed-ownership-outside");
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -1171,9 +1221,13 @@ fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppres
     let inner = html_element_by_id("dismissible-stack-suppressed-ownership-inner");
 
     inner.focus().expect("focus inner");
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
     inner.focus().expect("restore focus inner");
+    render_tick().await;
     dispatch_escape_keydown(&inner);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1216,12 +1270,14 @@ fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_suppres
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount() {
+async fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_inner_unmount()
+{
     let host = append_div("dismissible-stack-suppressed-restore-host");
     let outside = append_button("dismissible-stack-suppressed-restore-outside");
     let inner_present = RwSignal::new(true);
@@ -1286,7 +1342,9 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
 
     let inner = html_element_by_id("dismissible-stack-suppressed-restore-inner");
     inner.focus().expect("focus inner");
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1308,9 +1366,12 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
     );
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
     let outer = html_element_by_id("dismissible-stack-suppressed-restore-outer");
     outer.focus().expect("focus outer");
+    render_tick().await;
     outside.focus().expect("restore focus outside");
+    render_tick().await;
 
     assert_eq!(
         outer_dismissals
@@ -1338,12 +1399,13 @@ fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_after_i
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmount() {
+async fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     let host = append_div("dismissible-stack-suppressed-restore-escape-host");
     let inner_present = RwSignal::new(true);
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -1390,6 +1452,7 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
 
     let inner = html_element_by_id("dismissible-stack-suppressed-restore-escape-inner");
     dispatch_escape_keydown(&inner);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1412,7 +1475,9 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
 
     let outer = html_element_by_id("dismissible-stack-suppressed-restore-escape-outer");
     outer.focus().expect("focus outer");
+    render_tick().await;
     dispatch_escape_keydown(&outer);
+    render_tick().await;
 
     assert_eq!(
         outer_dismissals
@@ -1430,11 +1495,12 @@ fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_unmoun
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focus() {
+async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focus() {
     let host = append_div("dismissible-nonlifo-doc-host");
     let outside = append_button("dismissible-nonlifo-doc-outside");
     let middle_present = RwSignal::new(true);
@@ -1522,6 +1588,7 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     });
 
     middle_present.set(false);
+    render_tick().await;
     assert!(
         document()
             .get_element_by_id("dismissible-nonlifo-doc-middle")
@@ -1532,8 +1599,11 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     let outer = html_element_by_id("dismissible-nonlifo-doc-outer");
 
     inner.focus().expect("focus inner");
+    render_tick().await;
     outer.focus().expect("focus outer");
+    render_tick().await;
     dispatch_pointer_down(&outside);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1566,6 +1636,7 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     );
 
     inner_present.set(false);
+    render_tick().await;
     assert!(
         document()
             .get_element_by_id("dismissible-nonlifo-doc-inner")
@@ -1573,8 +1644,11 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     );
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
     outer.focus().expect("refocus outer");
+    render_tick().await;
     outside.focus().expect("focus outside");
+    render_tick().await;
 
     assert_eq!(
         outer_dismissals
@@ -1605,12 +1679,13 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_and_focu
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
+async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     let host = append_div("dismissible-nonlifo-escape-host");
     let middle_present = RwSignal::new(true);
     let inner_present = RwSignal::new(true);
@@ -1662,6 +1737,7 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     });
 
     middle_present.set(false);
+    render_tick().await;
     assert!(
         document()
             .get_element_by_id("dismissible-nonlifo-escape-middle")
@@ -1670,6 +1746,7 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
 
     let inner = html_element_by_id("dismissible-nonlifo-escape-inner");
     dispatch_escape_keydown(&inner);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -1686,6 +1763,7 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     );
 
     inner_present.set(false);
+    render_tick().await;
     assert!(
         document()
             .get_element_by_id("dismissible-nonlifo-escape-inner")
@@ -1694,7 +1772,9 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
 
     let outer = html_element_by_id("dismissible-nonlifo-escape-outer");
     outer.focus().expect("focus outer");
+    render_tick().await;
     dispatch_escape_keydown(&outer);
+    render_tick().await;
 
     assert_eq!(
         outer_dismissals
@@ -1712,11 +1792,12 @@ fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() {
+async fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() {
     let host = append_div("dismissible-reuse-doc-host");
     let outside = append_button("dismissible-reuse-doc-outside");
     let inner_present = RwSignal::new(true);
@@ -1779,10 +1860,12 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() 
     for cycle in 0..2 {
         if cycle > 0 {
             inner_present.set(true);
+            render_tick().await;
         }
 
         let outer = html_element_by_id("dismissible-reuse-doc-outer");
         dispatch_pointer_down(&outer);
+        render_tick().await;
 
         assert_eq!(
             inner_dismissals
@@ -1805,8 +1888,11 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() 
         );
 
         dispatch_pointer_down(&outside);
+        render_tick().await;
         outer.focus().expect("focus outer");
+        render_tick().await;
         outside.focus().expect("focus outside");
+        render_tick().await;
     }
 
     assert_eq!(
@@ -1843,12 +1929,13 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_time() 
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
+async fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
     let host = append_div("dismissible-reuse-escape-host");
     let inner_present = RwSignal::new(true);
     let outer_dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -1893,10 +1980,12 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
     for cycle in 0..2 {
         if cycle > 0 {
             inner_present.set(true);
+            render_tick().await;
         }
 
         let inner = html_element_by_id("dismissible-reuse-escape-inner");
         dispatch_escape_keydown(&inner);
+        render_tick().await;
 
         assert_eq!(
             inner_dismissals
@@ -1920,7 +2009,9 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
 
         let outer = html_element_by_id("dismissible-reuse-escape-outer");
         outer.focus().expect("focus outer");
+        render_tick().await;
         dispatch_escape_keydown(&outer);
+        render_tick().await;
     }
 
     assert_eq!(
@@ -1939,11 +2030,12 @@ fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
+async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
     let host = append_div("dismissible-full-teardown-doc-host");
     let outside = append_button("dismissible-full-teardown-doc-outside");
     let outer_present = RwSignal::new(true);
@@ -2056,6 +2148,7 @@ fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
     });
 
     outer_present.set(false);
+    render_tick().await;
 
     assert!(host.first_element_child().is_none());
     assert!(
@@ -2065,7 +2158,9 @@ fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
     );
 
     dispatch_pointer_down(&outside);
+    render_tick().await;
     outside.focus().expect("focus outside after teardown");
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -2105,12 +2200,13 @@ fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardown() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
+async fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
     let host = append_div("dismissible-full-teardown-escape-host");
     let outside = append_button("dismissible-full-teardown-escape-outside");
     let outer_present = RwSignal::new(true);
@@ -2179,6 +2275,7 @@ fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
     });
 
     outer_present.set(false);
+    render_tick().await;
 
     assert!(host.first_element_child().is_none());
     assert!(
@@ -2188,6 +2285,7 @@ fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
     );
 
     dispatch_escape_keydown(&outside);
+    render_tick().await;
 
     assert!(
         outer_dismissals
@@ -2215,12 +2313,13 @@ fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remount() {
+async fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remount() {
     let host = append_div("dismissible-remount-doc-host");
     let outside = append_button("dismissible-remount-doc-outside");
     let present = RwSignal::new(true);
@@ -2284,12 +2383,16 @@ fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remo
     for cycle in 0..2 {
         if cycle > 0 {
             present.set(true);
+            render_tick().await;
         }
 
         let inner = html_element_by_id("dismissible-remount-doc-inner");
         inner.focus().expect("focus inner");
+        render_tick().await;
         dispatch_pointer_down(&outside);
+        render_tick().await;
         outside.focus().expect("focus outside");
+        render_tick().await;
 
         assert_eq!(
             dismissals.lock().expect("dismissals lock").len(),
@@ -2305,6 +2408,7 @@ fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remo
         );
 
         present.set(false);
+        render_tick().await;
         assert!(host.first_element_child().is_none());
     }
 
@@ -2336,12 +2440,13 @@ fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_and_remo
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]
-fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
+async fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
     let host = append_div("dismissible-remount-escape-host");
     let present = RwSignal::new(true);
     let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
@@ -2383,10 +2488,12 @@ fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
     for cycle in 0..2 {
         if cycle > 0 {
             present.set(true);
+            render_tick().await;
         }
 
         let inner = html_element_by_id("dismissible-remount-escape-inner");
         dispatch_escape_keydown(&inner);
+        render_tick().await;
 
         assert_eq!(dismissals.lock().expect("dismissals lock").len(), cycle + 1);
         assert_eq!(
@@ -2395,6 +2502,7 @@ fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
         );
 
         present.set(false);
+        render_tick().await;
         assert!(host.first_element_child().is_none());
     }
 
@@ -2408,11 +2516,12 @@ fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn portal_mounts_children_into_the_explicit_target() {
+async fn portal_mounts_children_into_the_explicit_target() {
     let host = append_div("portal-host");
     let target = append_div("portal-target");
     let target_mount: web_sys::Element = target.clone().into();
@@ -2430,6 +2539,7 @@ fn portal_mounts_children_into_the_explicit_target() {
     assert_eq!(target.text_content().as_deref(), Some("Portaled"));
 
     drop(mount);
+    render_tick().await;
     assert_eq!(target.text_content().unwrap_or_default(), "");
 
     remove_from_body(&host);
@@ -2437,7 +2547,7 @@ fn portal_mounts_children_into_the_explicit_target() {
 }
 
 #[wasm_bindgen_test]
-fn portal_without_explicit_mount_appends_to_body_and_cleans_up_on_drop() {
+async fn portal_without_explicit_mount_appends_to_body_and_cleans_up_on_drop() {
     let host = append_div("portal-default-host");
     let body_children_before_mount = body().child_element_count();
 
@@ -2462,6 +2572,7 @@ fn portal_without_explicit_mount_appends_to_body_and_cleans_up_on_drop() {
     );
 
     drop(mount);
+    render_tick().await;
     assert_eq!(host.text_content().unwrap_or_default(), "");
     assert_eq!(body().child_element_count(), body_children_before_mount);
 
@@ -2469,7 +2580,7 @@ fn portal_without_explicit_mount_appends_to_body_and_cleans_up_on_drop() {
 }
 
 #[wasm_bindgen_test]
-fn portal_without_explicit_mount_repeated_remounts_leave_no_stranded_body_nodes() {
+async fn portal_without_explicit_mount_repeated_remounts_leave_no_stranded_body_nodes() {
     let host = append_div("portal-default-remount-host");
     let present = RwSignal::new(true);
     let label = RwSignal::new("First");
@@ -2503,10 +2614,13 @@ fn portal_without_explicit_mount_repeated_remounts_leave_no_stranded_body_nodes(
     );
 
     present.set(false);
+    render_tick().await;
     assert_eq!(body().child_element_count(), body_children_before_mount);
 
     label.set("Second");
+    render_tick().await;
     present.set(true);
+    render_tick().await;
     assert_eq!(body().child_element_count(), body_children_before_mount + 1);
     assert_eq!(
         body()
@@ -2518,16 +2632,18 @@ fn portal_without_explicit_mount_repeated_remounts_leave_no_stranded_body_nodes(
     );
 
     present.set(false);
+    render_tick().await;
     assert_eq!(body().child_element_count(), body_children_before_mount);
 
     drop(mount);
+    render_tick().await;
     assert_eq!(body().child_element_count(), body_children_before_mount);
 
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones() {
+async fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones() {
     let host = append_div("portal-remount-host");
     let first_target = append_div("portal-remount-first-target");
     let second_target = append_div("portal-remount-second-target");
@@ -2565,32 +2681,39 @@ fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones()
     assert_eq!(second_target.child_element_count(), 0);
 
     present.set(false);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
     assert_eq!(second_target.child_element_count(), 0);
 
     use_first_target.set(false);
+    render_tick().await;
     present.set(true);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().as_deref(), Some("Portaled"));
     assert_eq!(second_target.child_element_count(), 1);
 
     present.set(false);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
     assert_eq!(second_target.child_element_count(), 0);
 
     use_first_target.set(true);
+    render_tick().await;
     present.set(true);
+    render_tick().await;
     assert_eq!(first_target.text_content().as_deref(), Some("Portaled"));
     assert_eq!(first_target.child_element_count(), 1);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
     assert_eq!(second_target.child_element_count(), 0);
 
     drop(mount);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
@@ -2602,7 +2725,7 @@ fn portal_repeated_remounts_clear_prior_targets_before_rendering_into_new_ones()
 }
 
 #[wasm_bindgen_test]
-fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
+async fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
     let host = append_div("portal-repeat-host");
     let target = append_div("portal-repeat-target");
     let present = RwSignal::new(true);
@@ -2630,24 +2753,31 @@ fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
     assert_eq!(target.child_element_count(), 1);
 
     present.set(false);
+    render_tick().await;
     assert_eq!(target.text_content().unwrap_or_default(), "");
     assert_eq!(target.child_element_count(), 0);
 
     label.set("Second");
+    render_tick().await;
     present.set(true);
+    render_tick().await;
     assert_eq!(target.text_content().as_deref(), Some("Second"));
     assert_eq!(target.child_element_count(), 1);
 
     present.set(false);
+    render_tick().await;
     assert_eq!(target.text_content().unwrap_or_default(), "");
     assert_eq!(target.child_element_count(), 0);
 
     label.set("Third");
+    render_tick().await;
     present.set(true);
+    render_tick().await;
     assert_eq!(target.text_content().as_deref(), Some("Third"));
     assert_eq!(target.child_element_count(), 1);
 
     drop(mount);
+    render_tick().await;
     assert_eq!(target.text_content().unwrap_or_default(), "");
     assert_eq!(target.child_element_count(), 0);
 
@@ -2656,7 +2786,7 @@ fn portal_repeated_remounts_into_the_same_target_do_not_duplicate_children() {
 }
 
 #[wasm_bindgen_test]
-fn portal_retargets_live_between_explicit_targets_without_teardown() {
+async fn portal_retargets_live_between_explicit_targets_without_teardown() {
     let host = append_div("portal-retarget-host");
     let first_target = append_div("portal-retarget-first-target");
     let second_target = append_div("portal-retarget-second-target");
@@ -2691,6 +2821,7 @@ fn portal_retargets_live_between_explicit_targets_without_teardown() {
     assert_eq!(second_target.child_element_count(), 0);
 
     use_first_target.set(false);
+    render_tick().await;
     assert_eq!(host.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
@@ -2698,6 +2829,7 @@ fn portal_retargets_live_between_explicit_targets_without_teardown() {
     assert_eq!(second_target.child_element_count(), 1);
 
     use_first_target.set(true);
+    render_tick().await;
     assert_eq!(host.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.text_content().as_deref(), Some("Retargeted"));
     assert_eq!(first_target.child_element_count(), 1);
@@ -2705,6 +2837,7 @@ fn portal_retargets_live_between_explicit_targets_without_teardown() {
     assert_eq!(second_target.child_element_count(), 0);
 
     drop(mount);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
@@ -2716,7 +2849,7 @@ fn portal_retargets_live_between_explicit_targets_without_teardown() {
 }
 
 #[wasm_bindgen_test]
-fn portal_live_retargeting_keeps_only_one_copy_while_content_changes() {
+async fn portal_live_retargeting_keeps_only_one_copy_while_content_changes() {
     let host = append_div("portal-retarget-content-host");
     let first_target = append_div("portal-retarget-content-first-target");
     let second_target = append_div("portal-retarget-content-second-target");
@@ -2751,20 +2884,25 @@ fn portal_live_retargeting_keeps_only_one_copy_while_content_changes() {
     assert_eq!(second_target.child_element_count(), 0);
 
     label.set("Two");
+    render_tick().await;
     use_first_target.set(false);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().as_deref(), Some("Two"));
     assert_eq!(second_target.child_element_count(), 1);
 
     label.set("Three");
+    render_tick().await;
     use_first_target.set(true);
+    render_tick().await;
     assert_eq!(first_target.text_content().as_deref(), Some("Three"));
     assert_eq!(first_target.child_element_count(), 1);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
     assert_eq!(second_target.child_element_count(), 0);
 
     drop(mount);
+    render_tick().await;
     assert_eq!(first_target.text_content().unwrap_or_default(), "");
     assert_eq!(first_target.child_element_count(), 0);
     assert_eq!(second_target.text_content().unwrap_or_default(), "");
@@ -2776,7 +2914,7 @@ fn portal_live_retargeting_keeps_only_one_copy_while_content_changes() {
 }
 
 #[wasm_bindgen_test]
-fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
+async fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
     let shell = append_div("modal-shell");
     let left = append_child_div(&shell, "modal-left");
     let active_branch = append_child_div(&shell, "modal-active-branch");
@@ -2820,7 +2958,7 @@ fn modal_hide_siblings_hides_nested_siblings_and_restores_previous_state() {
 }
 
 #[wasm_bindgen_test]
-fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
+async fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
     let shell = append_div("nested-modal-shell");
     let left = append_child_div(&shell, "nested-modal-left");
     let active_branch = append_child_div(&shell, "nested-modal-active-branch");
@@ -2867,7 +3005,7 @@ fn nested_modal_guards_keep_outer_siblings_hidden_until_last_guard_drops() {
 }
 
 #[wasm_bindgen_test]
-fn focus_scope_traps_tab_within_the_live_scope() {
+async fn focus_scope_traps_tab_within_the_live_scope() {
     let host = append_div("focus-scope-host");
 
     let mount = mount_to(host.clone(), move || {
@@ -2895,23 +3033,27 @@ fn focus_scope_traps_tab_within_the_live_scope() {
         .expect("second html element");
 
     first.focus().expect("focus first");
+    render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-first"));
 
     let first_tab = dispatch_tab_keydown(&first, false);
+    render_tick().await;
     assert!(first_tab.default_prevented());
     assert_eq!(active_id().as_deref(), Some("focus-second"));
 
     let second_tab = dispatch_tab_keydown(&second, false);
+    render_tick().await;
     assert!(second_tab.default_prevented());
     assert_eq!(active_id().as_deref(), Some("focus-first"));
     assert_ne!(active_id().as_deref(), Some("focus-after"));
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
+async fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
     let host = append_div("focus-scope-shift-host");
 
     let mount = mount_to(host.clone(), move || {
@@ -2934,19 +3076,22 @@ fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
         .expect("first shift html element");
 
     first.focus().expect("focus first shift");
+    render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-shift-first"));
 
     let shift_tab = dispatch_tab_keydown(&first, true);
+    render_tick().await;
     assert!(shift_tab.default_prevented());
     assert_eq!(active_id().as_deref(), Some("focus-shift-last"));
     assert_ne!(active_id().as_deref(), Some("focus-shift-before"));
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
+async fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
     let previous = document()
         .create_element("button")
         .expect("create previous button")
@@ -2957,6 +3102,7 @@ fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
         .append_child(&previous)
         .expect("append previous button");
     previous.focus().expect("focus previous");
+    render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-lifecycle-previous"));
 
     let host = append_div("focus-lifecycle-host");
@@ -2995,6 +3141,7 @@ fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
             </FocusScope>
         }
     });
+    render_tick().await;
 
     assert_eq!(active_id().as_deref(), Some("focus-lifecycle-first"));
     assert_eq!(
@@ -3003,6 +3150,7 @@ fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
     );
 
     drop(mount);
+    render_tick().await;
 
     assert_eq!(active_id().as_deref(), Some("focus-lifecycle-previous"));
     assert_eq!(
@@ -3015,7 +3163,7 @@ fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
 }
 
 #[wasm_bindgen_test]
-fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable() {
+async fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable() {
     let host = append_div("focus-wrapper-host");
 
     let mount = mount_to(host.clone(), move || {
@@ -3025,6 +3173,7 @@ fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable()
             </FocusScope>
         }
     });
+    render_tick().await;
 
     let wrapper = host
         .first_element_child()
@@ -3037,11 +3186,12 @@ fn focus_scope_auto_focus_falls_back_to_the_wrapper_when_no_child_is_focusable()
     assert!(active_element().is_some_and(|active| { active.is_same_node(Some(&wrapper_element)) }));
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_completes_exit() {
+async fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_completes_exit() {
     let host = append_div("presence-transition-host");
     let present = RwSignal::new(true);
     let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
@@ -3078,11 +3228,13 @@ fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_complet
         .expect("set transition duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
 
     let child = html_element_by_id("presence-transition-child");
     dispatch_transition_end(&child, true);
+    render_tick().await;
     assert!(host.first_element_child().is_some());
     assert!(
         exit_callbacks
@@ -3092,6 +3244,7 @@ fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_complet
     );
 
     dispatch_transition_end(&root, true);
+    render_tick().await;
     assert!(host.first_element_child().is_none());
     assert_eq!(
         exit_callbacks
@@ -3102,11 +3255,12 @@ fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_complet
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes_exit() {
+async fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes_exit() {
     let host = append_div("presence-animation-host");
     let present = RwSignal::new(true);
     let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
@@ -3143,11 +3297,13 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
         .expect("set animation duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
 
     let child = html_element_by_id("presence-animation-child");
     dispatch_animation_end(&child, true);
+    render_tick().await;
     assert!(host.first_element_child().is_some());
     assert!(
         exit_callbacks
@@ -3157,6 +3313,7 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
     );
 
     dispatch_animation_end(&root, true);
+    render_tick().await;
     assert!(host.first_element_child().is_none());
     assert_eq!(
         exit_callbacks
@@ -3167,6 +3324,7 @@ fn presence_ignores_bubbled_child_animationend_until_root_animationend_completes
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
@@ -3208,6 +3366,7 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
         .expect("set transition duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
     assert!(
@@ -3229,6 +3388,7 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
@@ -3270,11 +3430,13 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
         .expect("set transition duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
 
     TimeoutFuture::new(20).await;
     present.set(true);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(host.first_element_child().is_some());
     assert!(
@@ -3295,6 +3457,7 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
     );
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     TimeoutFuture::new(120).await;
 
@@ -3308,11 +3471,12 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transition_exit() {
+async fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transition_exit() {
     let host = append_div("presence-stale-transition-host");
     let present = RwSignal::new(true);
     let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
@@ -3349,10 +3513,12 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
         .expect("set transition duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
 
     present.set(true);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(host.first_element_child().is_some());
     assert!(
@@ -3363,6 +3529,7 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
     );
 
     dispatch_transition_end(&root, true);
+    render_tick().await;
     assert!(host.first_element_child().is_some());
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(
@@ -3373,8 +3540,10 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
     );
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     dispatch_transition_end(&root, true);
+    render_tick().await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -3386,11 +3555,12 @@ fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_transitio
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_exit() {
+async fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_exit() {
     let host = append_div("presence-stale-animation-host");
     let present = RwSignal::new(true);
     let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
@@ -3427,10 +3597,12 @@ fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_
         .expect("set animation duration");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
 
     present.set(true);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(host.first_element_child().is_some());
     assert!(
@@ -3441,6 +3613,7 @@ fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_
     );
 
     dispatch_animation_end(&root, true);
+    render_tick().await;
     assert!(host.first_element_child().is_some());
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(
@@ -3451,8 +3624,10 @@ fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_
     );
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     dispatch_animation_end(&root, true);
+    render_tick().await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -3464,11 +3639,12 @@ fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_animation_
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once() {
+async fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once() {
     let host = append_div("presence-immediate-host");
     let present = RwSignal::new(true);
     let exit_callbacks: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
@@ -3508,6 +3684,7 @@ fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once
         .expect("set animation duration");
 
     present.set(false);
+    render_tick().await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -3519,6 +3696,7 @@ fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complete_once
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
@@ -3569,6 +3747,7 @@ async fn presence_timeout_fallback_waits_for_the_longest_computed_exit_path() {
         .expect("set animation delay");
 
     present.set(false);
+    render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     assert!(host.first_element_child().is_some());
     assert!(
@@ -3600,11 +3779,12 @@ async fn presence_timeout_fallback_waits_for_the_longest_computed_exit_path() {
     );
 
     drop(mount);
+    render_tick().await;
     remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]
-fn scroll_lock_release_restores_previous_body_styles() {
+async fn scroll_lock_release_restores_previous_body_styles() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");
@@ -3638,7 +3818,7 @@ fn scroll_lock_release_restores_previous_body_styles() {
 }
 
 #[wasm_bindgen_test]
-fn nested_scroll_lock_guards_preserve_body_lock_until_the_last_drop() {
+async fn nested_scroll_lock_guards_preserve_body_lock_until_the_last_drop() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");
@@ -3676,7 +3856,7 @@ fn nested_scroll_lock_guards_preserve_body_lock_until_the_last_drop() {
 }
 
 #[wasm_bindgen_test]
-fn mixed_scroll_lock_release_and_guard_drop_restore_styles_after_the_final_logical_release() {
+async fn mixed_scroll_lock_release_and_guard_drop_restore_styles_after_the_final_logical_release() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");
@@ -3721,7 +3901,7 @@ fn mixed_scroll_lock_release_and_guard_drop_restore_styles_after_the_final_logic
 }
 
 #[wasm_bindgen_test]
-fn scroll_lock_reacquire_captures_a_fresh_body_style_snapshot() {
+async fn scroll_lock_reacquire_captures_a_fresh_body_style_snapshot() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");
@@ -3767,13 +3947,13 @@ fn scroll_lock_reacquire_captures_a_fresh_body_style_snapshot() {
 }
 
 #[wasm_bindgen_test]
-fn extra_scroll_lock_release_after_full_unlock_leaves_restored_styles_unchanged() {
+async fn extra_scroll_lock_release_after_full_unlock_leaves_restored_styles_unchanged() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");
     let width_before = body_style("width");
 
-    set_body_style("overflow", "overlay");
+    set_body_style("overflow", "scroll");
     set_body_style("position", "relative");
     set_body_style("top", "11px");
     set_body_style("width", "52%");
@@ -3786,14 +3966,14 @@ fn extra_scroll_lock_release_after_full_unlock_leaves_restored_styles_unchanged(
 
     drop(guard);
 
-    assert_eq!(body_style("overflow"), "overlay");
+    assert_eq!(body_style("overflow"), "scroll");
     assert_eq!(body_style("position"), "relative");
     assert_eq!(body_style("top"), "11px");
     assert_eq!(body_style("width"), "52%");
 
     scroll_lock_release().expect("extra release on unlocked body");
 
-    assert_eq!(body_style("overflow"), "overlay");
+    assert_eq!(body_style("overflow"), "scroll");
     assert_eq!(body_style("position"), "relative");
     assert_eq!(body_style("top"), "11px");
     assert_eq!(body_style("width"), "52%");
@@ -3805,7 +3985,7 @@ fn extra_scroll_lock_release_after_full_unlock_leaves_restored_styles_unchanged(
 }
 
 #[wasm_bindgen_test]
-fn scroll_lock_restores_the_original_snapshot_after_mid_lock_style_mutation() {
+async fn scroll_lock_restores_the_original_snapshot_after_mid_lock_style_mutation() {
     let overflow_before = body_style("overflow");
     let position_before = body_style("position");
     let top_before = body_style("top");

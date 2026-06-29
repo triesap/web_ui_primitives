@@ -24,7 +24,7 @@ Use the umbrella crate when you want one dependency with feature-gated adapters:
 ```toml
 [dependencies]
 web_ui_primitives = { version = "0.1.0", features = ["leptos"] }
-leptos = { version = "0.8.16", features = ["csr"] }
+leptos = { version = "0.9.0-alpha", features = ["csr"] }
 ```
 
 Use the adapter crate directly when you want explicit control over the dependency graph:
@@ -33,7 +33,7 @@ Use the adapter crate directly when you want explicit control over the dependenc
 [dependencies]
 web_ui_primitives_core = "0.1.0"
 web_ui_primitives_leptos = "0.1.0"
-leptos = { version = "0.8.16", features = ["csr"] }
+leptos = { version = "0.9.0-alpha", features = ["csr"] }
 ```
 
 Example (Leptos):
