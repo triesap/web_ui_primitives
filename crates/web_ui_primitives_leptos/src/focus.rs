@@ -62,10 +62,21 @@ where
     E: html::ElementType,
     E::Output: 'static,
 {
+    use_focus_scope_with_node_ref(NodeRef::<E>::new(), options)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a wrapper-free focus scope binding from an existing [`NodeRef`].
+pub fn use_focus_scope_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    options: FocusScopeOptions,
+) -> FocusScopeBinding<E>
+where
+    E: html::ElementType,
+    E::Output: 'static,
+{
     let _ = options;
-    FocusScopeBinding {
-        node_ref: NodeRef::<E>::new(),
-    }
+    FocusScopeBinding { node_ref }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -75,7 +86,19 @@ where
     E: html::ElementType,
     E::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
-    let node_ref = NodeRef::<E>::new();
+    use_focus_scope_with_node_ref(NodeRef::<E>::new(), options)
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free focus scope binding from an existing [`NodeRef`].
+pub fn use_focus_scope_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    options: FocusScopeOptions,
+) -> FocusScopeBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
     attach_focus_scope(node_ref, options);
     FocusScopeBinding { node_ref }
 }

@@ -169,10 +169,21 @@ where
     E: html::ElementType,
     E::Output: 'static,
 {
+    use_dismissible_layer_with_node_ref(NodeRef::<E>::new(), options)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a wrapper-free dismissible layer binding from an existing [`NodeRef`].
+pub fn use_dismissible_layer_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    options: DismissibleLayerOptions,
+) -> DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+    E::Output: 'static,
+{
     let _ = options;
-    DismissibleLayerBinding {
-        node_ref: NodeRef::<E>::new(),
-    }
+    DismissibleLayerBinding { node_ref }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -182,7 +193,19 @@ where
     E: html::ElementType,
     E::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
-    let node_ref = NodeRef::<E>::new();
+    use_dismissible_layer_with_node_ref(NodeRef::<E>::new(), options)
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free dismissible layer binding from an existing [`NodeRef`].
+pub fn use_dismissible_layer_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    options: DismissibleLayerOptions,
+) -> DismissibleLayerBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
     attach_dismissible_layer(node_ref, options);
     DismissibleLayerBinding { node_ref }
 }

@@ -8,10 +8,11 @@ use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 use web_ui_primitives_leptos::{
-    DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent, DismissibleLayer,
-    DismissibleLayerOptions, DismissiblePointerDownOutsideEvent, DismissibleReason, FocusScope,
-    FocusScopeOptions, Portal, Presence, modal_hide_siblings, scroll_lock_acquire,
-    scroll_lock_release, use_dismissible_layer, use_focus_scope, use_presence,
+    DialogLayerOptions, DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent,
+    DismissibleLayer, DismissibleLayerOptions, DismissiblePointerDownOutsideEvent,
+    DismissibleReason, FocusScope, FocusScopeOptions, Portal, Presence, modal_hide_siblings,
+    scroll_lock_acquire, scroll_lock_release, use_dialog_layer, use_dismissible_layer,
+    use_focus_scope, use_presence,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -160,6 +161,95 @@ fn set_body_style(name: &str, value: &str) {
 
 fn scroll_y() -> f64 {
     window().scroll_y().expect("read scroll y")
+}
+
+fn browser_dialog_layer(
+    open: RwSignal<bool>,
+    dismissals: Arc<Mutex<Vec<DismissibleReason>>>,
+) -> impl IntoView {
+    let open_signal = Signal::derive(move || open.get());
+    let mut options = DialogLayerOptions::new(open_signal);
+    options.on_dismiss = Some(Callback::new(move |reason| {
+        dismissals.lock().expect("dismissals lock").push(reason);
+        open.set(false);
+    }));
+    let dialog = use_dialog_layer::<html::Div>(options);
+    let node_ref = dialog.node_ref();
+
+    view! {
+        <Portal>
+            <div
+                id="dialog-layer-root"
+                node_ref=node_ref
+                role="dialog"
+                aria-label="Test dialog"
+                tabindex="-1"
+                data-state="open"
+            >
+                <button id="dialog-layer-inside">"Inside"</button>
+            </div>
+        </Portal>
+    }
+}
+
+#[wasm_bindgen_test]
+async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() {
+    let host = append_div("dialog-layer-host");
+    let outside = append_button("dialog-layer-outside");
+    let original_overflow = body_style("overflow");
+    let original_position = body_style("position");
+    let open = RwSignal::new(false);
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+
+        view! {
+            <button id="dialog-layer-trigger">"Open"</button>
+            {move || -> AnyView {
+                if open.get() {
+                    browser_dialog_layer(open, Arc::clone(&dismissals)).into_any()
+                } else {
+                    ().into_any()
+                }
+            }}
+        }
+    });
+
+    render_tick().await;
+    let trigger = html_element_by_id("dialog-layer-trigger");
+    trigger.focus().expect("focus trigger");
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+
+    let inside = html_element_by_id("dialog-layer-inside");
+    assert_eq!(active_id().as_deref(), Some("dialog-layer-inside"));
+    assert_eq!(attr(&outside, "aria-hidden").as_deref(), Some("true"));
+    assert!(outside.has_attribute("inert"));
+    assert_eq!(body_style("overflow"), "hidden");
+    assert_eq!(body_style("position"), "fixed");
+
+    dispatch_escape_keydown(&inside);
+    render_tick().await;
+    render_tick().await;
+
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert!(document().get_element_by_id("dialog-layer-root").is_none());
+    assert_eq!(attr(&outside, "aria-hidden"), None);
+    assert!(!outside.has_attribute("inert"));
+    assert_eq!(body_style("overflow"), original_overflow);
+    assert_eq!(body_style("position"), original_position);
+    assert_eq!(active_id().as_deref(), Some("dialog-layer-trigger"));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&outside);
 }
 
 #[wasm_bindgen_test]

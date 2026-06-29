@@ -3,8 +3,8 @@
 //! The crate exposes two layers:
 //!
 //! - `attrs`: pure helpers that derive DOM attributes from core state models.
-//! - behavioral primitives such as [`FocusScope`], [`DismissibleLayer`],
-//!   [`Portal`], [`Presence`], and [`ModalGuard`].
+//! - behavioral primitives such as [`use_dialog_layer`], [`FocusScope`],
+//!   [`DismissibleLayer`], [`Portal`], [`Presence`], and [`ModalGuard`].
 //!
 //! The DOM binding surface uses `Dom*` and `Dismissible*` terminology.
 //!
@@ -28,6 +28,7 @@
 #![forbid(unsafe_code)]
 
 pub mod attrs;
+mod dialog;
 mod dismissible;
 mod dom_bindings;
 mod focus;
@@ -36,11 +37,16 @@ mod portal;
 mod presence;
 mod scroll_lock;
 
+pub use dialog::{
+    DialogLayerBinding, DialogLayerError, DialogLayerOptions, use_dialog_layer,
+    use_dialog_layer_with_node_ref,
+};
 pub use dismissible::{
     DismissibleBranch, DismissibleEscapeKeyDownEvent, DismissibleEvent,
     DismissibleFocusOutsideEvent, DismissibleLayer, DismissibleLayerBinding,
     DismissibleLayerOptions, DismissiblePointerDownOutsideEvent, DismissibleReason,
     dismissible_is_escape, dismissible_is_outside, use_dismissible_layer,
+    use_dismissible_layer_with_node_ref,
 };
 pub use dom_bindings::{
     BoundElement, DomAttribute, DomAttributeValue, DomBindingError, DomBindingResult,
@@ -48,12 +54,13 @@ pub use dom_bindings::{
 };
 pub use focus::{
     FocusScope, FocusScopeBinding, FocusScopeOptions, focus_scope_next_index, focus_scope_selector,
-    use_focus_scope,
+    use_focus_scope, use_focus_scope_with_node_ref,
 };
 pub use modal::{
     ModalError, ModalGuard, ModalResult, ModalTarget, modal_hide_siblings, modal_restore,
 };
 pub use portal::{Portal, PortalMount};
+pub use presence::use_presence_with_node_ref;
 pub use presence::{Presence, PresenceBinding, PresenceState, presence_state_next, use_presence};
 pub use scroll_lock::{
     ScrollLockError, ScrollLockGuard, ScrollLockResult, scroll_lock_acquire, scroll_lock_release,

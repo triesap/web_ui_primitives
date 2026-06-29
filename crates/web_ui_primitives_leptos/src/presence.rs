@@ -275,7 +275,21 @@ where
     E: html::ElementType,
     E::Output: Clone + 'static,
 {
-    create_presence_binding(NodeRef::<E>::new(), present.into(), on_exit_complete)
+    use_presence_with_node_ref(NodeRef::<E>::new(), present, on_exit_complete)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a wrapper-free presence binding from an existing [`NodeRef`].
+pub fn use_presence_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    present: impl Into<Signal<bool>>,
+    on_exit_complete: Option<Callback<()>>,
+) -> PresenceBinding<E>
+where
+    E: html::ElementType,
+    E::Output: Clone + 'static,
+{
+    create_presence_binding(node_ref, present.into(), on_exit_complete)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -288,7 +302,21 @@ where
     E: html::ElementType,
     E::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
-    create_presence_binding(NodeRef::<E>::new(), present.into(), on_exit_complete)
+    use_presence_with_node_ref(NodeRef::<E>::new(), present, on_exit_complete)
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a wrapper-free presence binding from an existing [`NodeRef`].
+pub fn use_presence_with_node_ref<E>(
+    node_ref: NodeRef<E>,
+    present: impl Into<Signal<bool>>,
+    on_exit_complete: Option<Callback<()>>,
+) -> PresenceBinding<E>
+where
+    E: html::ElementType,
+    E::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    create_presence_binding(node_ref, present.into(), on_exit_complete)
 }
 
 #[component]
