@@ -10,9 +10,9 @@ use wasm_bindgen_test::*;
 use web_ui_primitives_leptos::{
     DialogLayerOptions, DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent,
     DismissibleLayer, DismissibleLayerOptions, DismissiblePointerDownOutsideEvent,
-    DismissibleReason, FocusScope, FocusScopeOptions, Portal, Presence, modal_hide_siblings,
-    scroll_lock_acquire, scroll_lock_release, use_dialog_layer, use_dismissible_layer,
-    use_focus_scope, use_presence,
+    DismissibleReason, FocusScope, FocusScopeOptions, MenuLayerOptions, Portal, Presence,
+    modal_hide_siblings, scroll_lock_acquire, scroll_lock_release, use_dialog_layer,
+    use_dismissible_layer, use_focus_scope, use_menu_layer, use_presence,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -284,6 +284,47 @@ fn browser_readiness_dialog_layer(
     }
 }
 
+fn browser_menu_layer(
+    open: RwSignal<bool>,
+    dismissals: Arc<Mutex<Vec<DismissibleReason>>>,
+) -> impl IntoView {
+    let open_signal = Signal::derive(move || open.get());
+    let mut options = MenuLayerOptions::new(open_signal);
+    options.on_dismiss = Some(Callback::new(move |reason| {
+        dismissals.lock().expect("dismissals lock").push(reason);
+        open.set(false);
+    }));
+    let menu = use_menu_layer::<html::Div>(options);
+
+    view! {
+        {move || -> AnyView {
+            if !menu.is_rendered() {
+                ().into_any()
+            } else {
+                let node_ref = menu.node_ref();
+                let transition_end = menu.transition_end_handler();
+                let animation_end = menu.animation_end_handler();
+
+                view! {
+                    <div
+                        id="menu-layer-root"
+                        node_ref=node_ref
+                        role="menu"
+                        tabindex="-1"
+                        data-state=menu.data_state()
+                        on:transitionend=move |event| transition_end.run(event)
+                        on:animationend=move |event| animation_end.run(event)
+                    >
+                        <button id="menu-layer-first" type="button">"English"</button>
+                        <button id="menu-layer-second" type="button">"Spanish"</button>
+                    </div>
+                }
+                .into_any()
+            }
+        }}
+    }
+}
+
 #[wasm_bindgen_test]
 async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() {
     let host = append_div("dialog-layer-host");
@@ -337,6 +378,72 @@ async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() 
     assert_eq!(body_style("overflow"), original_overflow);
     assert_eq!(body_style("position"), original_position);
     assert_eq!(active_id().as_deref(), Some("dialog-layer-trigger"));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+    remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
+    let host = append_div("menu-layer-host");
+    let outside = append_button("menu-layer-outside");
+    let open = RwSignal::new(false);
+    let dismissals: Arc<Mutex<Vec<DismissibleReason>>> = Arc::new(Mutex::new(Vec::new()));
+    let dismissals_handle = Arc::clone(&dismissals);
+
+    let mount = mount_to(host.clone(), move || {
+        let dismissals = Arc::clone(&dismissals_handle);
+
+        view! {
+            <button id="menu-layer-trigger">"Locale"</button>
+            {move || browser_menu_layer(open, Arc::clone(&dismissals))}
+        }
+    });
+
+    render_tick().await;
+    let trigger = html_element_by_id("menu-layer-trigger");
+    trigger.focus().expect("focus trigger");
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+
+    let first = html_element_by_id("menu-layer-first");
+    assert_eq!(active_id().as_deref(), Some("menu-layer-first"));
+    assert_eq!(
+        attr(&html_element_by_id("menu-layer-root"), "data-state").as_deref(),
+        Some("open")
+    );
+
+    dispatch_escape_keydown(&first);
+    render_tick().await;
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[DismissibleReason::Escape]
+    );
+    assert_eq!(active_id().as_deref(), Some("menu-layer-trigger"));
+    assert!(document().get_element_by_id("menu-layer-root").is_none());
+
+    trigger.focus().expect("focus trigger");
+    open.set(true);
+    render_tick().await;
+    render_tick().await;
+    assert_eq!(active_id().as_deref(), Some("menu-layer-first"));
+
+    dispatch_pointer_down(&outside);
+    render_tick().await;
+    render_tick().await;
+    assert_eq!(
+        dismissals.lock().expect("dismissals lock").as_slice(),
+        &[
+            DismissibleReason::Escape,
+            DismissibleReason::PointerDownOutside
+        ]
+    );
+    assert_eq!(active_id().as_deref(), Some("menu-layer-trigger"));
+    assert!(document().get_element_by_id("menu-layer-root").is_none());
 
     drop(mount);
     render_tick().await;
