@@ -5,6 +5,7 @@
 //!
 //! - [`CollapsibleModel`]
 //! - [`DialogModel`]
+//! - [`MenuModel`]
 //! - [`TabsModel`]
 //!
 //! Lower-level interaction utilities such as [`roving_focus`] and
@@ -35,6 +36,8 @@ extern crate alloc;
 pub mod collapsible;
 /// Headless state model for dialogs.
 pub mod dialog;
+/// Headless state model for menus.
+pub mod menu;
 /// Shared orientation enum used by interaction models.
 pub mod orientation;
 /// Low-level roving focus utilities used by composite widgets.
@@ -46,6 +49,7 @@ pub mod typeahead;
 
 pub use collapsible::{CollapsibleModel, CollapsibleState};
 pub use dialog::{DialogModel, DialogState};
+pub use menu::{MenuLoop, MenuModel, MenuState};
 pub use orientation::{Direction, Orientation};
 pub use tabs::{TabsActivation, TabsLoop, TabsModel};
 pub use typeahead::{Typeahead, TypeaheadKeyResult};
