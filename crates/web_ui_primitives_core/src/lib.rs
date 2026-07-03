@@ -40,6 +40,8 @@ pub mod dialog;
 pub mod menu;
 /// Shared orientation enum used by interaction models.
 pub mod orientation;
+/// Shared layer placement model for floating UI surfaces.
+pub mod placement;
 /// Low-level roving focus utilities used by composite widgets.
 pub mod roving_focus;
 /// Headless state model for tabs.
@@ -51,6 +53,10 @@ pub use collapsible::{CollapsibleModel, CollapsibleState};
 pub use dialog::{DialogModel, DialogState};
 pub use menu::{MenuLoop, MenuModel, MenuState};
 pub use orientation::{Direction, Orientation};
+pub use placement::{
+    Placement, PlacementAlign, PlacementOptions, PlacementRect, PlacementSide, PlacementSize,
+    place_layer,
+};
 pub use tabs::{TabsActivation, TabsLoop, TabsModel};
 pub use typeahead::{Typeahead, TypeaheadKeyResult};
 
