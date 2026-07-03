@@ -2,6 +2,11 @@
 
 use leptos::html;
 use leptos::prelude::*;
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
+use web_ui_primitives_core::{PlacementAlign, PlacementSide};
+#[cfg(target_arch = "wasm32")]
+use web_ui_primitives_core::{PlacementOptions, PlacementRect, PlacementSize, place_layer};
 
 use crate::{
     DismissibleBranch, DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent,
@@ -26,6 +31,76 @@ pub struct MenuLayerOptions {
     pub on_unmount_auto_focus: Option<Callback<()>>,
 }
 
+#[derive(Clone)]
+/// Options for [`use_menu_placement_with_node_refs`].
+pub struct MenuPlacementOptions {
+    pub open: Signal<bool>,
+    pub side: PlacementSide,
+    pub align: PlacementAlign,
+    pub spacing: f64,
+    pub viewport_padding: f64,
+}
+
+impl MenuPlacementOptions {
+    /// Creates menu placement options for an open signal.
+    pub fn new(open: impl Into<Signal<bool>>, side: PlacementSide, align: PlacementAlign) -> Self {
+        Self {
+            open: open.into(),
+            side,
+            align,
+            spacing: 4.0,
+            viewport_padding: 8.0,
+        }
+    }
+
+    /// Sets the gap between the trigger and menu content.
+    pub fn spacing(mut self, spacing: f64) -> Self {
+        self.spacing = spacing;
+        self
+    }
+
+    /// Sets the viewport padding used while flipping and shifting content.
+    pub fn viewport_padding(mut self, viewport_padding: f64) -> Self {
+        self.viewport_padding = viewport_padding;
+        self
+    }
+}
+
+#[derive(Clone)]
+/// Handle returned by [`use_menu_placement_with_node_refs`].
+pub struct MenuPlacementBinding {
+    style: RwSignal<String>,
+    side: RwSignal<PlacementSide>,
+    align: PlacementAlign,
+}
+
+impl MenuPlacementBinding {
+    /// Returns inline CSS positioning for the menu content.
+    pub fn style(&self) -> String {
+        self.style.get()
+    }
+
+    /// Returns the resolved placement side.
+    pub fn side(&self) -> PlacementSide {
+        self.side.get()
+    }
+
+    /// Returns the requested placement alignment.
+    pub fn align(&self) -> PlacementAlign {
+        self.align
+    }
+
+    /// Returns the resolved placement side as a stable data attribute value.
+    pub fn data_side(&self) -> &'static str {
+        placement_side_data_value(self.side())
+    }
+
+    /// Returns the requested placement alignment as a stable data attribute value.
+    pub fn data_align(&self) -> &'static str {
+        placement_align_data_value(self.align())
+    }
+}
+
 impl MenuLayerOptions {
     /// Creates menu layer options for an open signal.
     pub fn new(open: impl Into<Signal<bool>>) -> Self {
@@ -43,6 +118,109 @@ impl MenuLayerOptions {
             on_unmount_auto_focus: None,
         }
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Creates a menu placement binding from trigger and content [`NodeRef`] values.
+pub fn use_menu_placement_with_node_refs<T, C>(
+    _trigger_ref: NodeRef<T>,
+    _content_ref: NodeRef<C>,
+    options: MenuPlacementOptions,
+) -> MenuPlacementBinding
+where
+    T: html::ElementType,
+    T::Output: Clone + 'static,
+    C: html::ElementType,
+    C::Output: Clone + 'static,
+{
+    MenuPlacementBinding {
+        style: RwSignal::new(String::new()),
+        side: RwSignal::new(options.side),
+        align: options.align,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Creates a menu placement binding from trigger and content [`NodeRef`] values.
+pub fn use_menu_placement_with_node_refs<T, C>(
+    trigger_ref: NodeRef<T>,
+    content_ref: NodeRef<C>,
+    options: MenuPlacementOptions,
+) -> MenuPlacementBinding
+where
+    T: html::ElementType,
+    T::Output: wasm_bindgen::JsCast + Clone + 'static,
+    C: html::ElementType,
+    C::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use send_wrapper::SendWrapper;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    let binding = MenuPlacementBinding {
+        style: RwSignal::new(String::new()),
+        side: RwSignal::new(options.side),
+        align: options.align,
+    };
+    let style = binding.style;
+    let side = binding.side;
+    let align = binding.align;
+
+    content_ref.on_load(move |content| {
+        let Ok(content) = content.dyn_into::<web_sys::Element>() else {
+            return;
+        };
+        let trigger_ref = trigger_ref;
+        let options = options.clone();
+        let content = SendWrapper::new(content);
+        let update_options = options.clone();
+        let update = Rc::new(move || {
+            update_menu_placement(
+                trigger_ref,
+                content.clone(),
+                update_options.clone(),
+                style,
+                side,
+                align,
+            );
+        });
+
+        let update_for_effect = Rc::clone(&update);
+        let effect_options = options.clone();
+        Effect::new(move || {
+            let _ = effect_options.open.get();
+            update_for_effect();
+        });
+
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let resize_update = Rc::clone(&update);
+        let resize = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            resize_update();
+        }) as Box<dyn FnMut(_)>);
+        let scroll_update = Rc::clone(&update);
+        let scroll = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+            scroll_update();
+        }) as Box<dyn FnMut(_)>);
+        let _ = window.add_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+        let _ = window.add_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
+        let cleanup_window = SendWrapper::new(window);
+        let cleanup_resize = SendWrapper::new(resize);
+        let cleanup_scroll = SendWrapper::new(scroll);
+
+        on_cleanup(move || {
+            let window = cleanup_window.take();
+            let resize = cleanup_resize.take();
+            let scroll = cleanup_scroll.take();
+            let _ = window
+                .remove_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+            let _ = window
+                .remove_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
+        });
+    });
+
+    binding
 }
 
 #[derive(Clone)]
@@ -83,6 +261,88 @@ where
     pub fn animation_end_handler(&self) -> Callback<leptos::ev::AnimationEvent> {
         self.presence.animation_end_handler()
     }
+}
+
+pub fn placement_side_data_value(side: PlacementSide) -> &'static str {
+    match side {
+        PlacementSide::Top => "top",
+        PlacementSide::Right => "right",
+        PlacementSide::Bottom => "bottom",
+        PlacementSide::Left => "left",
+    }
+}
+
+pub fn placement_align_data_value(align: PlacementAlign) -> &'static str {
+    match align {
+        PlacementAlign::Start => "start",
+        PlacementAlign::Center => "center",
+        PlacementAlign::End => "end",
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn update_menu_placement<T>(
+    trigger_ref: NodeRef<T>,
+    content: send_wrapper::SendWrapper<web_sys::Element>,
+    options: MenuPlacementOptions,
+    style: RwSignal<String>,
+    side: RwSignal<PlacementSide>,
+    align: PlacementAlign,
+) where
+    T: html::ElementType,
+    T::Output: wasm_bindgen::JsCast + Clone + 'static,
+{
+    use wasm_bindgen::JsCast;
+
+    if !options.open.get_untracked() {
+        style.set(String::new());
+        side.set(options.side);
+        return;
+    }
+
+    let Some(trigger) = trigger_ref
+        .get()
+        .and_then(|trigger| trigger.dyn_into::<web_sys::Element>().ok())
+    else {
+        return;
+    };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let Some(viewport_width) = window.inner_width().ok().and_then(|value| value.as_f64()) else {
+        return;
+    };
+    let Some(viewport_height) = window.inner_height().ok().and_then(|value| value.as_f64()) else {
+        return;
+    };
+
+    let trigger_rect = trigger.get_bounding_client_rect();
+    let content_rect = content.get_bounding_client_rect();
+    let placement = place_layer(
+        PlacementRect {
+            x: trigger_rect.x(),
+            y: trigger_rect.y(),
+            width: trigger_rect.width(),
+            height: trigger_rect.height(),
+        },
+        PlacementSize {
+            width: content_rect.width(),
+            height: content_rect.height(),
+        },
+        PlacementSize {
+            width: viewport_width,
+            height: viewport_height,
+        },
+        PlacementOptions::new(options.side, align)
+            .spacing(options.spacing)
+            .viewport_padding(options.viewport_padding),
+    );
+
+    style.set(format!(
+        "left:{:.3}px;top:{:.3}px;max-width:{:.3}px;max-height:{:.3}px;",
+        placement.x, placement.y, placement.max_width, placement.max_height,
+    ));
+    side.set(placement.side);
 }
 
 #[cfg(not(target_arch = "wasm32"))]

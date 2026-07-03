@@ -33,6 +33,7 @@ web-sys = { version = "0.3.91", features = [
   "PointerEventInit",
   "FocusEvent",
   "CssStyleDeclaration",
+  "DomRect",
   "HtmlCollection",
   "HtmlElement",
   "KeyboardEvent",

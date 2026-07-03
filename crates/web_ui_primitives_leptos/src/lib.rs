@@ -57,7 +57,11 @@ pub use focus::{
     FocusScope, FocusScopeBinding, FocusScopeOptions, focus_scope_next_index, focus_scope_selector,
     use_focus_scope, use_focus_scope_with_node_ref,
 };
-pub use menu::{MenuLayerBinding, MenuLayerOptions, use_menu_layer, use_menu_layer_with_node_ref};
+pub use menu::{
+    MenuLayerBinding, MenuLayerOptions, MenuPlacementBinding, MenuPlacementOptions,
+    placement_align_data_value, placement_side_data_value, use_menu_layer,
+    use_menu_layer_with_node_ref, use_menu_placement_with_node_refs,
+};
 pub use modal::{
     ModalError, ModalGuard, ModalResult, ModalTarget, modal_hide_siblings, modal_restore,
 };
