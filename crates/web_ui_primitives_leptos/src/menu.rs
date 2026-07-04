@@ -74,6 +74,13 @@ pub struct MenuPlacementBinding {
     align: PlacementAlign,
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MenuPlacementUpdateTiming {
+    Immediate,
+    AnimationFrame,
+}
+
 impl MenuPlacementBinding {
     /// Returns inline CSS positioning for the menu content.
     pub fn style(&self) -> String {
@@ -117,6 +124,15 @@ impl MenuLayerOptions {
             on_mount_auto_focus: None,
             on_unmount_auto_focus: None,
         }
+    }
+}
+
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+fn menu_placement_update_timing(open: bool) -> MenuPlacementUpdateTiming {
+    if open {
+        MenuPlacementUpdateTiming::AnimationFrame
+    } else {
+        MenuPlacementUpdateTiming::Immediate
     }
 }
 
@@ -174,7 +190,7 @@ where
         let options = options.clone();
         let content = SendWrapper::new(content);
         let update_options = options.clone();
-        let update = Rc::new(move || {
+        let update: Rc<dyn Fn()> = Rc::new(move || {
             update_menu_placement(
                 trigger_ref,
                 content.clone(),
@@ -185,12 +201,17 @@ where
             );
         });
 
+        request_menu_placement_update(Rc::clone(&update));
         let update_for_effect = Rc::clone(&update);
         let effect_options = options.clone();
-        Effect::new(move || {
-            let _ = effect_options.open.get();
-            update_for_effect();
-        });
+        Effect::new(
+            move || match menu_placement_update_timing(effect_options.open.get()) {
+                MenuPlacementUpdateTiming::Immediate => update_for_effect(),
+                MenuPlacementUpdateTiming::AnimationFrame => {
+                    request_menu_placement_update(Rc::clone(&update_for_effect));
+                }
+            },
+        );
 
         let Some(window) = web_sys::window() else {
             return;
@@ -221,6 +242,27 @@ where
     });
 
     binding
+}
+
+#[cfg(target_arch = "wasm32")]
+fn request_menu_placement_update(update: Rc<dyn Fn()>) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    let Some(window) = web_sys::window() else {
+        update();
+        return;
+    };
+    let fallback_update = Rc::clone(&update);
+    let callback = Closure::once_into_js(move || {
+        update();
+    });
+    if window
+        .request_animation_frame(callback.unchecked_ref())
+        .is_err()
+    {
+        fallback_update();
+    }
 }
 
 #[derive(Clone)]
@@ -471,4 +513,21 @@ where
         },
     );
     MenuLayerBinding { node_ref, presence }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MenuPlacementUpdateTiming, menu_placement_update_timing};
+
+    #[test]
+    fn open_menu_placement_updates_after_layout_frame() {
+        assert_eq!(
+            menu_placement_update_timing(true),
+            MenuPlacementUpdateTiming::AnimationFrame
+        );
+        assert_eq!(
+            menu_placement_update_timing(false),
+            MenuPlacementUpdateTiming::Immediate
+        );
+    }
 }
