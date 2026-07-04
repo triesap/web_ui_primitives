@@ -128,12 +128,20 @@ impl MenuLayerOptions {
 }
 
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-fn menu_placement_update_timing(open: bool) -> MenuPlacementUpdateTiming {
-    if open {
-        MenuPlacementUpdateTiming::AnimationFrame
-    } else {
-        MenuPlacementUpdateTiming::Immediate
+fn menu_placement_update_timing(
+    open: bool,
+    trigger_loaded: bool,
+    content_loaded: bool,
+) -> Option<MenuPlacementUpdateTiming> {
+    if !open {
+        return Some(MenuPlacementUpdateTiming::Immediate);
     }
+
+    if trigger_loaded && content_loaded {
+        return Some(MenuPlacementUpdateTiming::AnimationFrame);
+    }
+
+    None
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -169,7 +177,6 @@ where
     C: html::ElementType,
     C::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
-    use send_wrapper::SendWrapper;
     use wasm_bindgen::JsCast;
     use wasm_bindgen::closure::Closure;
 
@@ -181,64 +188,71 @@ where
     let style = binding.style;
     let side = binding.side;
     let align = binding.align;
+    let update_options = options.clone();
+    let update: Rc<dyn Fn()> = Rc::new(move || {
+        update_menu_placement(
+            trigger_ref,
+            content_ref,
+            update_options.clone(),
+            style,
+            side,
+            align,
+        );
+    });
 
-    content_ref.on_load(move |content| {
-        let Ok(content) = content.dyn_into::<web_sys::Element>() else {
+    let update_for_effect = Rc::clone(&update);
+    let effect_options = options.clone();
+    let effect_trigger_ref = trigger_ref;
+    let effect_content_ref = content_ref;
+    Effect::new(move || {
+        let open = effect_options.open.get();
+        let trigger_loaded = effect_trigger_ref.get().is_some();
+        let content_loaded = effect_content_ref.get().is_some();
+
+        if !open {
+            update_for_effect();
             return;
-        };
-        let trigger_ref = trigger_ref;
-        let options = options.clone();
-        let content = SendWrapper::new(content);
-        let update_options = options.clone();
-        let update: Rc<dyn Fn()> = Rc::new(move || {
-            update_menu_placement(
-                trigger_ref,
-                content.clone(),
-                update_options.clone(),
-                style,
-                side,
-                align,
-            );
-        });
+        }
 
-        request_menu_placement_update(Rc::clone(&update));
-        let update_for_effect = Rc::clone(&update);
-        let effect_options = options.clone();
-        Effect::new(
-            move || match menu_placement_update_timing(effect_options.open.get()) {
+        if !trigger_loaded || !content_loaded {
+            return;
+        }
+
+        if let Some(timing) = menu_placement_update_timing(open, trigger_loaded, content_loaded) {
+            match timing {
                 MenuPlacementUpdateTiming::Immediate => update_for_effect(),
                 MenuPlacementUpdateTiming::AnimationFrame => {
                     request_menu_placement_update(Rc::clone(&update_for_effect));
                 }
-            },
-        );
+            }
+        }
+    });
 
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        let resize_update = Rc::clone(&update);
-        let resize = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-            resize_update();
-        }) as Box<dyn FnMut(_)>);
-        let scroll_update = Rc::clone(&update);
-        let scroll = Closure::wrap(Box::new(move |_event: web_sys::Event| {
-            scroll_update();
-        }) as Box<dyn FnMut(_)>);
-        let _ = window.add_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
-        let _ = window.add_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
-        let cleanup_window = SendWrapper::new(window);
-        let cleanup_resize = SendWrapper::new(resize);
-        let cleanup_scroll = SendWrapper::new(scroll);
+    let Some(window) = web_sys::window() else {
+        return binding;
+    };
+    let resize_update = Rc::clone(&update);
+    let resize = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+        resize_update();
+    }) as Box<dyn FnMut(_)>);
+    let scroll_update = Rc::clone(&update);
+    let scroll = Closure::wrap(Box::new(move |_event: web_sys::Event| {
+        scroll_update();
+    }) as Box<dyn FnMut(_)>);
+    let _ = window.add_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+    let _ = window.add_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
+    let cleanup_window = send_wrapper::SendWrapper::new(window);
+    let cleanup_resize = send_wrapper::SendWrapper::new(resize);
+    let cleanup_scroll = send_wrapper::SendWrapper::new(scroll);
 
-        on_cleanup(move || {
-            let window = cleanup_window.take();
-            let resize = cleanup_resize.take();
-            let scroll = cleanup_scroll.take();
-            let _ = window
-                .remove_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
-            let _ = window
-                .remove_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
-        });
+    on_cleanup(move || {
+        let window = cleanup_window.take();
+        let resize = cleanup_resize.take();
+        let scroll = cleanup_scroll.take();
+        let _ =
+            window.remove_event_listener_with_callback("resize", resize.as_ref().unchecked_ref());
+        let _ =
+            window.remove_event_listener_with_callback("scroll", scroll.as_ref().unchecked_ref());
     });
 
     binding
@@ -323,9 +337,9 @@ pub fn placement_align_data_value(align: PlacementAlign) -> &'static str {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn update_menu_placement<T>(
+fn update_menu_placement<T, C>(
     trigger_ref: NodeRef<T>,
-    content: send_wrapper::SendWrapper<web_sys::Element>,
+    content_ref: NodeRef<C>,
     options: MenuPlacementOptions,
     style: RwSignal<String>,
     side: RwSignal<PlacementSide>,
@@ -333,6 +347,8 @@ fn update_menu_placement<T>(
 ) where
     T: html::ElementType,
     T::Output: wasm_bindgen::JsCast + Clone + 'static,
+    C: html::ElementType,
+    C::Output: wasm_bindgen::JsCast + Clone + 'static,
 {
     use wasm_bindgen::JsCast;
 
@@ -343,8 +359,14 @@ fn update_menu_placement<T>(
     }
 
     let Some(trigger) = trigger_ref
-        .get()
+        .get_untracked()
         .and_then(|trigger| trigger.dyn_into::<web_sys::Element>().ok())
+    else {
+        return;
+    };
+    let Some(content) = content_ref
+        .get_untracked()
+        .and_then(|content| content.dyn_into::<web_sys::Element>().ok())
     else {
         return;
     };
@@ -520,14 +542,16 @@ mod tests {
     use super::{MenuPlacementUpdateTiming, menu_placement_update_timing};
 
     #[test]
-    fn open_menu_placement_updates_after_layout_frame() {
+    fn menu_placement_update_timing_tracks_open_and_loaded_refs() {
         assert_eq!(
-            menu_placement_update_timing(true),
-            MenuPlacementUpdateTiming::AnimationFrame
+            menu_placement_update_timing(false, false, false),
+            Some(MenuPlacementUpdateTiming::Immediate)
         );
+        assert_eq!(menu_placement_update_timing(true, false, false), None);
+        assert_eq!(menu_placement_update_timing(true, true, false), None);
         assert_eq!(
-            menu_placement_update_timing(false),
-            MenuPlacementUpdateTiming::Immediate
+            menu_placement_update_timing(true, true, true),
+            Some(MenuPlacementUpdateTiming::AnimationFrame)
         );
     }
 }
