@@ -76,8 +76,9 @@ pub struct MenuPlacementBinding {
 
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MenuPlacementUpdateTiming {
-    Immediate,
+enum MenuPlacementUpdateAction {
+    Clear,
+    Retain,
     AnimationFrame,
 }
 
@@ -128,20 +129,20 @@ impl MenuLayerOptions {
 }
 
 #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-fn menu_placement_update_timing(
+fn menu_placement_update_action(
     open: bool,
     trigger_loaded: bool,
     content_loaded: bool,
-) -> Option<MenuPlacementUpdateTiming> {
-    if !open {
-        return Some(MenuPlacementUpdateTiming::Immediate);
+) -> MenuPlacementUpdateAction {
+    if !content_loaded {
+        return MenuPlacementUpdateAction::Clear;
     }
 
-    if trigger_loaded && content_loaded {
-        return Some(MenuPlacementUpdateTiming::AnimationFrame);
+    if open && trigger_loaded {
+        return MenuPlacementUpdateAction::AnimationFrame;
     }
 
-    None
+    MenuPlacementUpdateAction::Retain
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -209,21 +210,13 @@ where
         let trigger_loaded = effect_trigger_ref.get().is_some();
         let content_loaded = effect_content_ref.get().is_some();
 
-        if !open {
-            update_for_effect();
-            return;
-        }
-
-        if !trigger_loaded || !content_loaded {
-            return;
-        }
-
-        if let Some(timing) = menu_placement_update_timing(open, trigger_loaded, content_loaded) {
-            match timing {
-                MenuPlacementUpdateTiming::Immediate => update_for_effect(),
-                MenuPlacementUpdateTiming::AnimationFrame => {
-                    request_menu_placement_update(Rc::clone(&update_for_effect));
-                }
+        match menu_placement_update_action(open, trigger_loaded, content_loaded) {
+            MenuPlacementUpdateAction::Clear => {
+                clear_menu_placement(style, side, effect_options.side);
+            }
+            MenuPlacementUpdateAction::Retain => {}
+            MenuPlacementUpdateAction::AnimationFrame => {
+                request_menu_placement_update(Rc::clone(&update_for_effect));
             }
         }
     });
@@ -337,6 +330,16 @@ pub fn placement_align_data_value(align: PlacementAlign) -> &'static str {
 }
 
 #[cfg(target_arch = "wasm32")]
+fn clear_menu_placement(
+    style: RwSignal<String>,
+    side: RwSignal<PlacementSide>,
+    requested_side: PlacementSide,
+) {
+    style.set(String::new());
+    side.set(requested_side);
+}
+
+#[cfg(target_arch = "wasm32")]
 fn update_menu_placement<T, C>(
     trigger_ref: NodeRef<T>,
     content_ref: NodeRef<C>,
@@ -353,8 +356,6 @@ fn update_menu_placement<T, C>(
     use wasm_bindgen::JsCast;
 
     if !options.open.get_untracked() {
-        style.set(String::new());
-        side.set(options.side);
         return;
     }
 
@@ -539,19 +540,37 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{MenuPlacementUpdateTiming, menu_placement_update_timing};
+    use super::{MenuPlacementUpdateAction, menu_placement_update_action};
 
     #[test]
-    fn menu_placement_update_timing_tracks_open_and_loaded_refs() {
+    fn menu_placement_update_action_tracks_open_and_loaded_refs() {
         assert_eq!(
-            menu_placement_update_timing(false, false, false),
-            Some(MenuPlacementUpdateTiming::Immediate)
+            menu_placement_update_action(false, false, false),
+            MenuPlacementUpdateAction::Clear
         );
-        assert_eq!(menu_placement_update_timing(true, false, false), None);
-        assert_eq!(menu_placement_update_timing(true, true, false), None);
         assert_eq!(
-            menu_placement_update_timing(true, true, true),
-            Some(MenuPlacementUpdateTiming::AnimationFrame)
+            menu_placement_update_action(false, false, true),
+            MenuPlacementUpdateAction::Retain
+        );
+        assert_eq!(
+            menu_placement_update_action(false, true, true),
+            MenuPlacementUpdateAction::Retain
+        );
+        assert_eq!(
+            menu_placement_update_action(true, false, false),
+            MenuPlacementUpdateAction::Clear
+        );
+        assert_eq!(
+            menu_placement_update_action(true, true, false),
+            MenuPlacementUpdateAction::Clear
+        );
+        assert_eq!(
+            menu_placement_update_action(true, false, true),
+            MenuPlacementUpdateAction::Retain
+        );
+        assert_eq!(
+            menu_placement_update_action(true, true, true),
+            MenuPlacementUpdateAction::AnimationFrame
         );
     }
 }
