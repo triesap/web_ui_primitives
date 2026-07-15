@@ -2,22 +2,13 @@
 
 Headless, accessible UI primitives for Rust web frameworks.
 
-## Goals
-
-- Provide framework-agnostic, headless UI primitives with strong accessibility defaults.
-- Offer thin framework bindings that attach behavior to any markup.
-- Stay unstyled by default so applications control their own design system.
-
 ## Crates
 
-- `web_ui_primitives_core` (no_std): primary interaction models (`collapsible`, `dialog`, `tabs`) plus low-level interaction utilities (`roving_focus`, `typeahead`).
-- `web_ui_primitives_leptos`: Leptos bindings for attaching attributes/events and behavior (focus scope, dismissible layer, presence, portal, modal aria-hidden, scroll lock).
+- `web_ui_primitives_core`: framework-neutral interaction models and utilities.
+- `web_ui_primitives_leptos`: Leptos bindings for DOM attributes, events, focus, overlays, presence, modal hiding, and scroll lock.
+- `web_ui_primitives`: umbrella crate with feature-gated adapters.
 
-## How it works
-
-Core models expose state. Framework bindings expose helpers that generate DOM attributes and event bindings, plus behavior primitives such as focus scopes and dismissible layers.
-
-## Using the crates
+## Install
 
 Use the umbrella crate when you want one dependency with feature-gated adapters:
 
@@ -36,23 +27,13 @@ web_ui_primitives_leptos = "0.1.0"
 leptos = { version = "0.9.0-alpha", features = ["csr"] }
 ```
 
-Example (Leptos):
+Use adapter crates directly when you want a narrower dependency graph:
 
-```rust
-use leptos::html;
-use leptos::prelude::*;
-use web_ui_primitives::core::collapsible::CollapsibleModel;
-use web_ui_primitives::leptos::{attrs::collapsible_trigger_attrs, use_dom_bindings};
-
-let model = RwSignal::new(CollapsibleModel::new(false));
-let attrs = Signal::derive(move || collapsible_trigger_attrs(&model.get(), Some("details")));
-let bindings = use_dom_bindings::<html::Button>(attrs, vec![]);
-
-view! {
-    <button node_ref=bindings.node_ref()>
-        "Toggle"
-    </button>
-}
+```toml
+[dependencies]
+web_ui_primitives_core = "0.1.0"
+web_ui_primitives_leptos = "0.1.0"
+leptos = { version = "0.9.0-alpha", features = ["csr"] }
 ```
 
 ## Features
@@ -60,27 +41,15 @@ view! {
 - `core` (default): core interaction models and low-level interaction utilities
 - `leptos`: Leptos bindings (depends on `web_ui_primitives_core`)
 
-## Browser testing
+## Testing
 
 Browser-only Leptos behavior is covered in
-`crates/web_ui_primitives_leptos/tests/browser.rs`.
-
-`cargo test` compiles that test target on host builds, but it only executes in
-a browser runtime. Run the browser harness with:
+`crates/web_ui_primitives_leptos/tests/browser.rs`. Run host tests with
+`cargo test`. Run the browser harness with:
 
 ```bash
 wasm-pack test --headless --chrome crates/web_ui_primitives_leptos
 ```
-
-If ChromeDriver needs explicit browser capabilities, use
-`webdriver.json.example` as the template for a local `webdriver.json` in the
-workspace root, or point `WASM_BINDGEN_TEST_WEBDRIVER_JSON` at a custom file.
-Set `goog:chromeOptions.binary` when Chrome or Chromium is installed outside
-the default discovery path.
-
-If your OS rejects a local browser build or ChromeDriver fails during browser
-startup or teardown, verify that the browser binary and driver are compatible
-and point ChromeDriver at a known-good Chrome or Chromium install.
 
 ## Contributing
 
