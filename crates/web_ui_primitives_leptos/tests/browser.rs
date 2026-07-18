@@ -4,8 +4,11 @@ use gloo_timers::future::TimeoutFuture;
 use leptos::html;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen_test::*;
 use web_ui_primitives_leptos::{
     DialogLayerOptions, DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent,
@@ -27,6 +30,35 @@ fn window() -> web_sys::Window {
 
 fn body() -> web_sys::HtmlElement {
     document().body().expect("body")
+}
+
+fn focus_element(target: &web_sys::HtmlElement) {
+    let observed = Rc::new(Cell::new(false));
+    let observed_by_listener = Rc::clone(&observed);
+    let listener = Closure::wrap(Box::new(move |_event: web_sys::FocusEvent| {
+        observed_by_listener.set(true);
+    }) as Box<dyn FnMut(_)>);
+    let document = document();
+    document
+        .add_event_listener_with_callback("focusin", listener.as_ref().unchecked_ref())
+        .expect("attach focus observation");
+
+    target.focus().expect("focus element");
+
+    document
+        .remove_event_listener_with_callback("focusin", listener.as_ref().unchecked_ref())
+        .expect("detach focus observation");
+    if observed.get() {
+        return;
+    }
+
+    let init = web_sys::FocusEventInit::new();
+    init.set_bubbles(true);
+    init.set_cancelable(false);
+    init.set_composed(true);
+    let event =
+        web_sys::FocusEvent::new_with_focus_event_init_dict("focusin", &init).expect("focus event");
+    target.dispatch_event(&event).expect("dispatch focusin");
 }
 
 async fn render_tick() {
@@ -388,7 +420,7 @@ async fn dialog_layer_composes_modal_focus_dismissible_portal_and_scroll_lock() 
 
     render_tick().await;
     let trigger = html_element_by_id("dialog-layer-trigger");
-    trigger.focus().expect("focus trigger");
+    focus_element(&trigger);
     open.set(true);
     render_tick().await;
     render_tick().await;
@@ -440,7 +472,7 @@ async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
 
     render_tick().await;
     let trigger = html_element_by_id("menu-layer-trigger");
-    trigger.focus().expect("focus trigger");
+    focus_element(&trigger);
     open.set(true);
     render_tick().await;
     render_tick().await;
@@ -462,7 +494,7 @@ async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
     assert_eq!(active_id().as_deref(), Some("menu-layer-trigger"));
     assert!(document().get_element_by_id("menu-layer-root").is_none());
 
-    trigger.focus().expect("focus trigger");
+    focus_element(&trigger);
     open.set(true);
     render_tick().await;
     render_tick().await;
@@ -531,7 +563,7 @@ async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presen
     });
 
     render_tick().await;
-    return_target.focus().expect("focus return target");
+    focus_element(&return_target);
     layer_mounted.set(true);
     render_tick().await;
     open.set(true);
@@ -594,7 +626,7 @@ async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presen
     render_tick().await;
     render_tick().await;
     assert_eq!(active_id().as_deref(), Some("dialog-readiness-first"));
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
     let root = html_element_by_id("dialog-readiness-root");
     assert_eq!(
@@ -757,12 +789,12 @@ async fn dismissible_layer_cancellable_events_can_prevent_dismissal() {
     });
 
     let inside = html_element_by_id("dismissible-cancel-inside");
-    inside.focus().expect("focus inside");
+    focus_element(&inside);
     render_tick().await;
 
     let pointer = dispatch_pointer_down(&outside);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
     let escape = dispatch_escape_keydown(&inside);
     render_tick().await;
@@ -807,12 +839,12 @@ async fn dismissible_layer_branches_are_treated_as_inside_the_layer() {
     });
 
     let inside = html_element_by_id("dismissible-branch-inside");
-    inside.focus().expect("focus inside");
+    focus_element(&inside);
     render_tick().await;
 
     dispatch_pointer_down(&branch);
     render_tick().await;
-    branch.focus().expect("focus branch");
+    focus_element(&branch);
     render_tick().await;
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
 
@@ -1007,9 +1039,9 @@ async fn dismissible_layer_ignores_focus_moves_within_the_layer() {
     let first = html_element_by_id("dismissible-focus-first");
     let second = html_element_by_id("dismissible-focus-second");
 
-    first.focus().expect("focus first");
+    focus_element(&first);
     render_tick().await;
-    second.focus().expect("focus second");
+    focus_element(&second);
     render_tick().await;
 
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
@@ -1057,12 +1089,12 @@ async fn dismissible_layer_reports_focus_outside_via_callback_and_reason() {
 
     let inside = html_element_by_id("dismissible-focus-inside");
 
-    inside.focus().expect("focus inside");
+    focus_element(&inside);
     render_tick().await;
     assert!(dismissals.lock().expect("dismissals lock").is_empty());
     assert!(focus_targets.lock().expect("focus targets lock").is_empty());
 
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
 
     assert_eq!(
@@ -1172,13 +1204,13 @@ async fn dismissible_layer_keeps_escape_and_focus_outside_active_when_pointer_di
 
     let inside = html_element_by_id("dismissible-pointer-disabled-combined-inside");
 
-    inside.focus().expect("focus inside");
+    focus_element(&inside);
     render_tick().await;
     dispatch_escape_keydown(&inside);
     render_tick().await;
     dispatch_pointer_down(&outside);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
 
     assert_eq!(
@@ -1337,11 +1369,11 @@ async fn dismissible_layer_routes_focus_and_escape_only_to_matching_callbacks() 
 
     let inside = html_element_by_id("dismissible-callback-focus-inside");
 
-    inside.focus().expect("focus inside");
+    focus_element(&inside);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
-    inside.focus().expect("restore focus inside");
+    focus_element(&inside);
     render_tick().await;
     dispatch_escape_keydown(&inside);
     render_tick().await;
@@ -1425,9 +1457,9 @@ async fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmos
         &[DismissibleReason::PointerDownOutside]
     );
 
-    inner.focus().expect("focus inner");
+    focus_element(&inner);
     render_tick().await;
-    outer_only.focus().expect("focus outer only");
+    focus_element(&outer_only);
     render_tick().await;
 
     assert!(
@@ -1586,9 +1618,9 @@ async fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_u
         &[DismissibleReason::PointerDownOutside]
     );
 
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
     assert_eq!(
         outer_dismissals
@@ -1681,7 +1713,7 @@ async fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
     );
 
     let outer = html_element_by_id("dismissible-stack-restore-escape-outer");
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
     dispatch_escape_keydown(&outer);
     render_tick().await;
@@ -1909,11 +1941,11 @@ async fn stacked_dismissible_layers_keep_focus_and_escape_owned_by_the_topmost_s
 
     let inner = html_element_by_id("dismissible-stack-suppressed-ownership-inner");
 
-    inner.focus().expect("focus inner");
+    focus_element(&inner);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
-    inner.focus().expect("restore focus inner");
+    focus_element(&inner);
     render_tick().await;
     dispatch_escape_keydown(&inner);
     render_tick().await;
@@ -2031,9 +2063,9 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_a
     });
 
     let inner = html_element_by_id("dismissible-stack-suppressed-restore-inner");
-    inner.focus().expect("focus inner");
+    focus_element(&inner);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
 
     assert!(
@@ -2058,9 +2090,9 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_a
     dispatch_pointer_down(&outside);
     render_tick().await;
     let outer = html_element_by_id("dismissible-stack-suppressed-restore-outer");
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
-    outside.focus().expect("restore focus outside");
+    focus_element(&outside);
     render_tick().await;
 
     assert_eq!(
@@ -2164,7 +2196,7 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_
     );
 
     let outer = html_element_by_id("dismissible-stack-suppressed-restore-escape-outer");
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
     dispatch_escape_keydown(&outer);
     render_tick().await;
@@ -2290,9 +2322,9 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_an
     let inner = html_element_by_id("dismissible-nonlifo-doc-inner");
     let outer = html_element_by_id("dismissible-nonlifo-doc-outer");
 
-    inner.focus().expect("focus inner");
+    focus_element(&inner);
     render_tick().await;
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
     dispatch_pointer_down(&outside);
     render_tick().await;
@@ -2337,9 +2369,9 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_an
 
     dispatch_pointer_down(&outside);
     render_tick().await;
-    outer.focus().expect("refocus outer");
+    focus_element(&outer);
     render_tick().await;
-    outside.focus().expect("focus outside");
+    focus_element(&outside);
     render_tick().await;
 
     assert_eq!(
@@ -2463,7 +2495,7 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
     );
 
     let outer = html_element_by_id("dismissible-nonlifo-escape-outer");
-    outer.focus().expect("focus outer");
+    focus_element(&outer);
     render_tick().await;
     dispatch_escape_keydown(&outer);
     render_tick().await;
@@ -2582,9 +2614,9 @@ async fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_t
 
         dispatch_pointer_down(&outside);
         render_tick().await;
-        outer.focus().expect("focus outer");
+        focus_element(&outer);
         render_tick().await;
-        outside.focus().expect("focus outside");
+        focus_element(&outside);
         render_tick().await;
     }
 
@@ -2701,7 +2733,7 @@ async fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
         );
 
         let outer = html_element_by_id("dismissible-reuse-escape-outer");
-        outer.focus().expect("focus outer");
+        focus_element(&outer);
         render_tick().await;
         dispatch_escape_keydown(&outer);
         render_tick().await;
@@ -2850,7 +2882,7 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
 
     dispatch_pointer_down(&outside);
     render_tick().await;
-    outside.focus().expect("focus outside after teardown");
+    focus_element(&outside);
     render_tick().await;
 
     assert!(
@@ -3076,11 +3108,11 @@ async fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_an
         }
 
         let inner = html_element_by_id("dismissible-remount-doc-inner");
-        inner.focus().expect("focus inner");
+        focus_element(&inner);
         render_tick().await;
         dispatch_pointer_down(&outside);
         render_tick().await;
-        outside.focus().expect("focus outside");
+        focus_element(&outside);
         render_tick().await;
 
         assert_eq!(
@@ -3808,7 +3840,7 @@ async fn focus_scope_skips_disabled_hidden_inert_and_negative_tabindex_candidate
     let first = html_element_by_id("focus-filter-first");
     let last = html_element_by_id("focus-filter-last");
 
-    first.focus().expect("focus first");
+    focus_element(&first);
     render_tick().await;
 
     let first_tab = dispatch_tab_keydown(&first, false);
@@ -3846,7 +3878,7 @@ async fn nested_focus_scopes_trap_only_their_owned_candidates() {
     render_tick().await;
 
     let outer_first = html_element_by_id("focus-nested-outer-first");
-    outer_first.focus().expect("focus outer first");
+    focus_element(&outer_first);
     render_tick().await;
 
     let outer_tab = dispatch_tab_keydown(&outer_first, false);
@@ -3856,7 +3888,7 @@ async fn nested_focus_scopes_trap_only_their_owned_candidates() {
 
     let inner_first = html_element_by_id("focus-nested-inner-first");
     let inner_second = html_element_by_id("focus-nested-inner-second");
-    inner_first.focus().expect("focus inner first");
+    focus_element(&inner_first);
     render_tick().await;
 
     let inner_tab = dispatch_tab_keydown(&inner_first, false);
@@ -3903,7 +3935,7 @@ async fn focus_scope_traps_tab_within_the_live_scope() {
         .dyn_into::<web_sys::HtmlElement>()
         .expect("second html element");
 
-    first.focus().expect("focus first");
+    focus_element(&first);
     render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-first"));
 
@@ -3946,7 +3978,7 @@ async fn focus_scope_wraps_shift_tab_to_the_last_focusable() {
         .dyn_into::<web_sys::HtmlElement>()
         .expect("first shift html element");
 
-    first.focus().expect("focus first shift");
+    focus_element(&first);
     render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-shift-first"));
 
@@ -3972,7 +4004,7 @@ async fn focus_scope_auto_focuses_restores_previous_focus_and_runs_callbacks() {
     body()
         .append_child(&previous)
         .expect("append previous button");
-    previous.focus().expect("focus previous");
+    focus_element(&previous);
     render_tick().await;
     assert_eq!(active_id().as_deref(), Some("focus-lifecycle-previous"));
 
