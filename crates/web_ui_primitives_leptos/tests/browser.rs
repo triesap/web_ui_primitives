@@ -453,7 +453,7 @@ async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
     );
 
     dispatch_escape_keydown(&first);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     render_tick().await;
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
@@ -469,7 +469,7 @@ async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
     assert_eq!(active_id().as_deref(), Some("menu-layer-first"));
 
     dispatch_pointer_down(&outside);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     render_tick().await;
     assert_eq!(
         dismissals.lock().expect("dismissals lock").as_slice(),
