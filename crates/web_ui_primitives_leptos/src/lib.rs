@@ -67,7 +67,10 @@ pub use modal::{
 };
 pub use portal::{Portal, PortalMount};
 pub use presence::use_presence_with_node_ref;
-pub use presence::{Presence, PresenceBinding, PresenceState, presence_state_next, use_presence};
+pub use presence::{
+    PRESENCE_ABI_VERSION, Presence, PresenceBinding, PresenceState, presence_state_next,
+    use_presence,
+};
 pub use scroll_lock::{
     ScrollLockError, ScrollLockGuard, ScrollLockResult, scroll_lock_acquire, scroll_lock_release,
 };

@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn scroll_lock_release_is_idempotent() {
-        let _ = scroll_lock_release().expect("release");
+        scroll_lock_release().expect("release");
         assert_eq!(scroll_lock_count_for_test(), 0);
     }
 }

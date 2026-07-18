@@ -218,6 +218,7 @@ fn available_main_size(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_x(
     anchor: PlacementRect,
     width: f64,
@@ -245,6 +246,7 @@ fn resolve_x(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_y(
     anchor: PlacementRect,
     height: f64,

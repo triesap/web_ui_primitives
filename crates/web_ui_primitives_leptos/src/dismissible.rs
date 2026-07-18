@@ -284,8 +284,8 @@ where
 
     if let Some(document) = document {
         if !disable_pointer_down_outside_dismiss {
-            let on_dismiss = options.on_dismiss.clone();
-            let on_pointer_down_outside = options.on_pointer_down_outside.clone();
+            let on_dismiss = options.on_dismiss;
+            let on_pointer_down_outside = options.on_pointer_down_outside;
             let pointer_active = active;
             let pointer_node_ref = node_ref;
             let pointer_branches = branches.clone();
@@ -328,8 +328,8 @@ where
             });
         }
 
-        let on_dismiss = options.on_dismiss.clone();
-        let on_focus_outside = options.on_focus_outside.clone();
+        let on_dismiss = options.on_dismiss;
+        let on_focus_outside = options.on_focus_outside;
         let focus_active = active;
         let focus_node_ref = node_ref;
         let focus_branches = branches.clone();

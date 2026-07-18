@@ -111,6 +111,11 @@ impl RovingFocus {
         self.len
     }
 
+    /// Returns whether no focusable slots are being tracked.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Returns the currently active index.
     pub fn active(&self) -> Option<usize> {
         self.active

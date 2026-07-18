@@ -69,6 +69,10 @@ impl MenuModel {
         self.focus.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.focus.is_empty()
+    }
+
     pub fn open(&self) -> bool {
         self.open
     }

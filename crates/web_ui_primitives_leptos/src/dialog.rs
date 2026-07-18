@@ -89,9 +89,19 @@ where
         self.presence.transition_end_handler()
     }
 
+    /// Returns the transition-cancel handler for the dialog content element.
+    pub fn transition_cancel_handler(&self) -> Callback<leptos::ev::TransitionEvent> {
+        self.presence.transition_cancel_handler()
+    }
+
     /// Returns the animation-end handler for the dialog element.
     pub fn animation_end_handler(&self) -> Callback<leptos::ev::AnimationEvent> {
         self.presence.animation_end_handler()
+    }
+
+    /// Returns the animation-cancel handler for the dialog content element.
+    pub fn animation_cancel_handler(&self) -> Callback<leptos::ev::AnimationEvent> {
+        self.presence.animation_cancel_handler()
     }
 }
 

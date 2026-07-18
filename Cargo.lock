@@ -1898,7 +1898,7 @@ dependencies = [
 
 [[package]]
 name = "web_ui_primitives"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "web_ui_primitives_core",
  "web_ui_primitives_leptos",
@@ -1906,16 +1906,18 @@ dependencies = [
 
 [[package]]
 name = "web_ui_primitives_core"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "web_ui_primitives_leptos"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gloo-timers",
+ "js-sys",
  "leptos",
  "send_wrapper",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "web_ui_primitives_core",

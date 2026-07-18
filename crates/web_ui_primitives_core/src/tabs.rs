@@ -86,6 +86,10 @@ impl TabsModel {
         self.focus.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.focus.is_empty()
+    }
+
     pub fn selected(&self) -> Option<usize> {
         self.selected
     }
@@ -289,7 +293,7 @@ impl TabsModel {
     }
 
     fn next_enabled_index(&self, current: Option<usize>, forward: bool) -> Option<usize> {
-        if self.len() == 0 || first_enabled_index(&self.disabled).is_none() {
+        if self.is_empty() || first_enabled_index(&self.disabled).is_none() {
             return None;
         }
 

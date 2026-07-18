@@ -177,7 +177,6 @@ fn attach_dom_bindings<E>(
 
         let element_for_effect = element.clone();
         let prev_attrs = Rc::clone(&prev_attrs_handle);
-        let attrs = attrs.clone();
         Effect::new(move || {
             let next = attrs.get();
             let mut previous = prev_attrs.borrow_mut();

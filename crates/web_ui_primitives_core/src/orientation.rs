@@ -1,17 +1,13 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Direction {
+    #[default]
     Ltr,
     Rtl,
 }
 
-impl Default for Direction {
-    fn default() -> Self {
-        Self::Ltr
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Orientation {
+    #[default]
     Horizontal,
     Vertical,
 }
@@ -22,12 +18,6 @@ impl Orientation {
             Orientation::Horizontal => "horizontal",
             Orientation::Vertical => "vertical",
         }
-    }
-}
-
-impl Default for Orientation {
-    fn default() -> Self {
-        Orientation::Horizontal
     }
 }
 

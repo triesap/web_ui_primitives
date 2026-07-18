@@ -18,8 +18,8 @@ core = ["web_ui_primitives_core"]
 leptos = ["web_ui_primitives_leptos"]
 
 [dependencies]
-web_ui_primitives_core = { path = "../web_ui_primitives_core", version = "0.1.0", optional = true }
-web_ui_primitives_leptos = { path = "../web_ui_primitives_leptos", version = "0.1.0", optional = true }
+web_ui_primitives_core = { path = "../web_ui_primitives_core", version = "0.2.0", optional = true }
+web_ui_primitives_leptos = { path = "../web_ui_primitives_leptos", version = "0.2.0", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

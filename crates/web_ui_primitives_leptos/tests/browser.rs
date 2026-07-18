@@ -108,21 +108,45 @@ fn dispatch_escape_keydown(target: &web_sys::HtmlElement) -> web_sys::KeyboardEv
 fn dispatch_transition_end(target: &web_sys::HtmlElement, bubbles: bool) {
     let init = web_sys::TransitionEventInit::new();
     init.set_bubbles(bubbles);
-    let event = web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &init.into())
+    init.set_property_name("opacity");
+    let event = web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &init)
         .expect("transition event");
     target
         .dispatch_event(&event)
         .expect("dispatch transitionend");
 }
 
+fn dispatch_transition_cancel(target: &web_sys::HtmlElement, property: &str) {
+    let init = web_sys::TransitionEventInit::new();
+    init.set_bubbles(true);
+    init.set_property_name(property);
+    let event = web_sys::TransitionEvent::new_with_event_init_dict("transitioncancel", &init)
+        .expect("transition cancel event");
+    target
+        .dispatch_event(&event)
+        .expect("dispatch transitioncancel");
+}
+
 fn dispatch_animation_end(target: &web_sys::HtmlElement, bubbles: bool) {
     let init = web_sys::AnimationEventInit::new();
     init.set_bubbles(bubbles);
-    let event = web_sys::AnimationEvent::new_with_event_init_dict("animationend", &init.into())
+    init.set_animation_name("fade");
+    let event = web_sys::AnimationEvent::new_with_event_init_dict("animationend", &init)
         .expect("animation event");
     target
         .dispatch_event(&event)
         .expect("dispatch animationend");
+}
+
+fn dispatch_animation_cancel(target: &web_sys::HtmlElement, name: &str) {
+    let init = web_sys::AnimationEventInit::new();
+    init.set_bubbles(true);
+    init.set_animation_name(name);
+    let event = web_sys::AnimationEvent::new_with_event_init_dict("animationcancel", &init)
+        .expect("animation cancel event");
+    target
+        .dispatch_event(&event)
+        .expect("dispatch animationcancel");
 }
 
 fn attr(element: &web_sys::HtmlElement, name: &str) -> Option<String> {
@@ -196,7 +220,9 @@ fn browser_readiness_dialog_surface(
     node_ref: NodeRef<html::Div>,
     open: Signal<bool>,
     transition_end: Callback<leptos::ev::TransitionEvent>,
+    transition_cancel: Callback<leptos::ev::TransitionEvent>,
     animation_end: Callback<leptos::ev::AnimationEvent>,
+    animation_cancel: Callback<leptos::ev::AnimationEvent>,
 ) -> impl IntoView {
     view! {
         <div
@@ -206,9 +232,11 @@ fn browser_readiness_dialog_surface(
             aria-label="Readiness dialog"
             tabindex="-1"
             data-state=move || if open.get() { "open" } else { "closed" }
-            style="transition-duration: 10ms;"
+            style="transition-property: opacity; transition-duration: 10ms;"
             on:transitionend=move |event| transition_end.run(event)
+            on:transitioncancel=move |event| transition_cancel.run(event)
             on:animationend=move |event| animation_end.run(event)
+            on:animationcancel=move |event| animation_cancel.run(event)
         >
             <button id="dialog-readiness-first">"First"</button>
             <button id="dialog-readiness-second">"Second"</button>
@@ -266,7 +294,9 @@ fn browser_readiness_dialog_layer(
             } else {
                 let node_ref = dialog.node_ref();
                 let transition_end = dialog.transition_end_handler();
+                let transition_cancel = dialog.transition_cancel_handler();
                 let animation_end = dialog.animation_end_handler();
+                let animation_cancel = dialog.animation_cancel_handler();
 
                 view! {
                     <Portal>
@@ -274,7 +304,9 @@ fn browser_readiness_dialog_layer(
                             node_ref,
                             data_state_open,
                             transition_end,
+                            transition_cancel,
                             animation_end,
+                            animation_cancel,
                         )}
                     </Portal>
                 }
@@ -303,7 +335,9 @@ fn browser_menu_layer(
             } else {
                 let node_ref = menu.node_ref();
                 let transition_end = menu.transition_end_handler();
+                let transition_cancel = menu.transition_cancel_handler();
                 let animation_end = menu.animation_end_handler();
+                let animation_cancel = menu.animation_cancel_handler();
 
                 view! {
                     <div
@@ -313,7 +347,9 @@ fn browser_menu_layer(
                         tabindex="-1"
                         data-state=menu.data_state()
                         on:transitionend=move |event| transition_end.run(event)
+                        on:transitioncancel=move |event| transition_cancel.run(event)
                         on:animationend=move |event| animation_end.run(event)
+                        on:animationcancel=move |event| animation_cancel.run(event)
                     >
                         <button id="menu-layer-first" type="button">"English"</button>
                         <button id="menu-layer-second" type="button">"Spanish"</button>
@@ -544,7 +580,7 @@ async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presen
     assert_eq!(body_style("overflow"), original_overflow);
     assert_eq!(body_style("position"), original_position);
 
-    TimeoutFuture::new(30).await;
+    TimeoutFuture::new(100).await;
     render_tick().await;
     assert!(
         document()
@@ -573,7 +609,7 @@ async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presen
         &["dialog-readiness-outside".to_string()]
     );
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
-    TimeoutFuture::new(30).await;
+    TimeoutFuture::new(100).await;
     render_tick().await;
     assert!(
         document()
@@ -597,7 +633,7 @@ async fn dialog_layer_readiness_fixture_covers_overlay_dismissal_and_exit_presen
         ]
     );
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
-    TimeoutFuture::new(30).await;
+    TimeoutFuture::new(100).await;
     render_tick().await;
     assert!(
         document()
@@ -1362,7 +1398,7 @@ async fn nested_dismissible_layers_route_pointer_and_focus_outside_to_the_topmos
         view! {
             <DismissibleLayer on_dismiss=outer_on_dismiss>
                 <button id="dismissible-stack-outer-only">"Outer"</button>
-                <DismissibleLayer on_dismiss=inner_on_dismiss.clone()>
+                <DismissibleLayer on_dismiss=inner_on_dismiss>
                     <button id="dismissible-stack-inner">"Inner"</button>
                 </DismissibleLayer>
             </DismissibleLayer>
@@ -1442,7 +1478,7 @@ async fn nested_dismissible_layers_route_escape_to_the_topmost_layer() {
 
         view! {
             <DismissibleLayer on_dismiss=outer_on_dismiss>
-                <DismissibleLayer on_dismiss=inner_on_dismiss.clone()>
+                <DismissibleLayer on_dismiss=inner_on_dismiss>
                     <button id="dismissible-stack-escape-inner">"Inner"</button>
                 </DismissibleLayer>
             </DismissibleLayer>
@@ -1504,7 +1540,7 @@ async fn nested_dismissible_layers_restore_outer_pointer_and_focus_after_inner_u
                 <button id="dismissible-stack-restore-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer on_dismiss=on_dismiss>
                                 <button id="dismissible-stack-restore-inner">"Inner"</button>
@@ -1609,7 +1645,7 @@ async fn nested_dismissible_layers_restore_outer_escape_after_inner_unmount() {
                 <button id="dismissible-stack-restore-escape-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer on_dismiss=on_dismiss>
                                 <button id="dismissible-stack-restore-escape-inner">"Inner"</button>
@@ -1979,7 +2015,7 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_pointer_and_focus_a
                 <button id="dismissible-stack-suppressed-restore-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer
                                 disable_pointer_down_outside_dismiss=true
@@ -2089,7 +2125,7 @@ async fn stacked_suppressed_dismissible_layers_restore_outer_escape_after_inner_
                 <button id="dismissible-stack-suppressed-restore-escape-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer
                                 disable_pointer_down_outside_dismiss=true
@@ -2227,8 +2263,8 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_pointer_an
                 }}
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
-                        let on_focus_outside = inner_on_focus_outside.clone();
+                        let on_dismiss = inner_on_dismiss;
+                        let on_focus_outside = inner_on_focus_outside;
                         view! {
                             <DismissibleLayer
                                 on_dismiss=on_dismiss
@@ -2380,7 +2416,7 @@ async fn dismissible_stack_cleanup_handles_middle_sibling_removal_for_escape() {
                 }}
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer on_dismiss=on_dismiss>
                                 <button id="dismissible-nonlifo-escape-inner">"Inner"</button>
@@ -2502,7 +2538,7 @@ async fn dismissible_cleanup_reuse_cycles_restore_outer_pointer_and_focus_each_t
                 <button id="dismissible-reuse-doc-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer on_dismiss=on_dismiss>
                                 <button id="dismissible-reuse-doc-inner">"Inner"</button>
@@ -2622,7 +2658,7 @@ async fn dismissible_cleanup_reuse_cycles_restore_outer_escape_each_time() {
                 <button id="dismissible-reuse-escape-outer">"Outer"</button>
                 {move || {
                     inner_present.get().then(|| {
-                        let on_dismiss = inner_on_dismiss.clone();
+                        let on_dismiss = inner_on_dismiss;
                         view! {
                             <DismissibleLayer on_dismiss=on_dismiss>
                                 <button id="dismissible-reuse-escape-inner">"Inner"</button>
@@ -2782,12 +2818,6 @@ async fn dismissible_layers_emit_no_pointer_or_focus_callbacks_after_full_teardo
         view! {
             {move || {
                 outer_present.get().then(|| {
-                    let outer_on_dismiss = outer_on_dismiss.clone();
-                    let inner_on_dismiss = inner_on_dismiss.clone();
-                    let outer_on_pointer_down_outside = outer_on_pointer_down_outside.clone();
-                    let inner_on_pointer_down_outside = inner_on_pointer_down_outside.clone();
-                    let outer_on_focus_outside = outer_on_focus_outside.clone();
-                    let inner_on_focus_outside = inner_on_focus_outside.clone();
                     view! {
                         <DismissibleLayer
                             on_dismiss=outer_on_dismiss
@@ -2915,10 +2945,6 @@ async fn dismissible_layers_emit_no_escape_callbacks_after_full_teardown() {
         view! {
             {move || {
                 outer_present.get().then(|| {
-                    let outer_on_dismiss = outer_on_dismiss.clone();
-                    let inner_on_dismiss = inner_on_dismiss.clone();
-                    let outer_on_escape_key_down = outer_on_escape_key_down.clone();
-                    let inner_on_escape_key_down = inner_on_escape_key_down.clone();
                     view! {
                         <DismissibleLayer
                             on_dismiss=outer_on_dismiss
@@ -3029,9 +3055,6 @@ async fn dismissible_layers_handle_pointer_and_focus_once_after_full_teardown_an
         view! {
             {move || {
                 present.get().then(|| {
-                    let on_dismiss = on_dismiss.clone();
-                    let on_pointer_down_outside = on_pointer_down_outside.clone();
-                    let on_focus_outside = on_focus_outside.clone();
                     view! {
                         <DismissibleLayer
                             on_dismiss=on_dismiss
@@ -3136,8 +3159,6 @@ async fn dismissible_layers_handle_escape_once_after_full_teardown_and_remount()
         view! {
             {move || {
                 present.get().then(|| {
-                    let on_dismiss = on_dismiss.clone();
-                    let on_escape_key_down = on_escape_key_down.clone();
                     view! {
                         <DismissibleLayer
                             on_dismiss=on_dismiss
@@ -4056,7 +4077,9 @@ async fn presence_binding_attaches_to_the_target_element_without_a_wrapper() {
                     let node_ref = presence.node_ref();
                     let data_state = presence.clone();
                     let transition_end = presence.transition_end_handler();
+                    let transition_cancel = presence.transition_cancel_handler();
                     let animation_end = presence.animation_end_handler();
+                    let animation_cancel = presence.animation_cancel_handler();
 
                     view! {
                         <section
@@ -4064,7 +4087,9 @@ async fn presence_binding_attaches_to_the_target_element_without_a_wrapper() {
                             node_ref=node_ref
                             data-state=move || data_state.data_state()
                             on:transitionend=move |event| transition_end.run(event)
+                            on:transitioncancel=move |event| transition_cancel.run(event)
                             on:animationend=move |event| animation_end.run(event)
+                            on:animationcancel=move |event| animation_cancel.run(event)
                         >
                             "Present"
                         </section>
@@ -4086,7 +4111,7 @@ async fn presence_binding_attaches_to_the_target_element_without_a_wrapper() {
     );
 
     present.set(false);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     assert!(host.first_element_child().is_none());
 
     drop(mount);
@@ -4128,6 +4153,9 @@ async fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_c
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
         .set_property("transition-duration", "10s")
         .expect("set transition duration");
 
@@ -4148,7 +4176,7 @@ async fn presence_ignores_bubbled_child_transitionend_until_root_transitionend_c
     );
 
     dispatch_transition_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     assert!(host.first_element_child().is_none());
     assert_eq!(
         exit_callbacks
@@ -4197,6 +4225,9 @@ async fn presence_ignores_bubbled_child_animationend_until_root_animationend_com
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("animation-name", "fade")
+        .expect("set animation name");
+    root.style()
         .set_property("animation-duration", "10s")
         .expect("set animation duration");
 
@@ -4217,7 +4248,7 @@ async fn presence_ignores_bubbled_child_animationend_until_root_animationend_com
     );
 
     dispatch_animation_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     assert!(host.first_element_child().is_none());
     assert_eq!(
         exit_callbacks
@@ -4226,6 +4257,112 @@ async fn presence_ignores_bubbled_child_animationend_until_root_animationend_com
             .as_slice(),
         &["animation"]
     );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn presence_waits_for_every_keyed_track_and_accepts_cancel_events() {
+    let host = append_div("presence-multi-track-host");
+    let present = RwSignal::new(true);
+    let exits = Arc::new(Mutex::new(0_u32));
+    let exits_handle = Arc::clone(&exits);
+    let mount = mount_to(host.clone(), move || {
+        let on_exit_complete = {
+            let exits = Arc::clone(&exits_handle);
+            Callback::new(move |_| *exits.lock().expect("exits lock") += 1)
+        };
+        view! {
+            <Presence
+                present=Signal::derive(move || present.get())
+                on_exit_complete=on_exit_complete
+            >
+                "Tracks"
+            </Presence>
+        }
+    });
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-property", "opacity, transform")
+        .expect("set transition properties");
+    root.style()
+        .set_property("transition-duration", "10s")
+        .expect("set transition durations");
+    root.style()
+        .set_property("animation-name", "fade")
+        .expect("set animation name");
+    root.style()
+        .set_property("animation-duration", "10s")
+        .expect("set animation duration");
+
+    present.set(false);
+    render_tick().await;
+    dispatch_transition_cancel(&root, "opacity");
+    TimeoutFuture::new(20).await;
+    assert!(host.first_element_child().is_some());
+
+    let transition = web_sys::TransitionEventInit::new();
+    transition.set_bubbles(true);
+    transition.set_property_name("transform");
+    let transition =
+        web_sys::TransitionEvent::new_with_event_init_dict("transitionend", &transition)
+            .expect("transform transition event");
+    root.dispatch_event(&transition)
+        .expect("dispatch transform transition");
+    TimeoutFuture::new(20).await;
+    assert!(host.first_element_child().is_some());
+
+    dispatch_animation_cancel(&root, "fade");
+    TimeoutFuture::new(40).await;
+    assert!(host.first_element_child().is_none());
+    assert_eq!(*exits.lock().expect("exits lock"), 1);
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn presence_recomputes_when_exit_motion_changes_without_an_event() {
+    let host = append_div("presence-style-change-host");
+    let present = RwSignal::new(true);
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <Presence present=Signal::derive(move || present.get())>
+                "Style change"
+            </Presence>
+        }
+    });
+    let root = host
+        .first_element_child()
+        .expect("presence root")
+        .dyn_into::<web_sys::HtmlElement>()
+        .expect("presence root html element");
+    root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
+        .set_property("transition-duration", "10s")
+        .expect("set transition duration");
+
+    present.set(false);
+    render_tick().await;
+    assert!(host.first_element_child().is_some());
+    root.style()
+        .set_property("transition-property", "none")
+        .expect("remove transition property");
+    root.style()
+        .set_property("transition-duration", "0s")
+        .expect("remove transition duration");
+
+    TimeoutFuture::new(60).await;
+    assert!(host.first_element_child().is_none());
 
     drop(mount);
     render_tick().await;
@@ -4266,6 +4403,9 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
         .set_property("transition-duration", "20ms")
         .expect("set transition duration");
 
@@ -4280,7 +4420,7 @@ async fn presence_timeout_fallback_unmounts_and_runs_exit_complete_once() {
             .is_empty()
     );
 
-    TimeoutFuture::new(60).await;
+    TimeoutFuture::new(100).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -4330,6 +4470,9 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
         .set_property("transition-duration", "80ms")
         .expect("set transition duration");
 
@@ -4363,7 +4506,7 @@ async fn presence_reopen_clears_pending_timeout_and_allows_a_later_timeout_exit(
     present.set(false);
     render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
-    TimeoutFuture::new(120).await;
+    TimeoutFuture::new(160).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -4413,6 +4556,9 @@ async fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_tra
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
         .set_property("transition-duration", "10s")
         .expect("set transition duration");
 
@@ -4433,7 +4579,7 @@ async fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_tra
     );
 
     dispatch_transition_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     assert!(host.first_element_child().is_some());
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(
@@ -4447,7 +4593,7 @@ async fn presence_reopen_ignores_stale_root_transitionend_and_allows_a_later_tra
     render_tick().await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     dispatch_transition_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -4497,6 +4643,9 @@ async fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_anim
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("animation-name", "fade")
+        .expect("set animation name");
+    root.style()
         .set_property("animation-duration", "10s")
         .expect("set animation duration");
 
@@ -4517,7 +4666,7 @@ async fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_anim
     );
 
     dispatch_animation_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
     assert!(host.first_element_child().is_some());
     assert_eq!(attr(&root, "data-state").as_deref(), Some("open"));
     assert!(
@@ -4528,10 +4677,11 @@ async fn presence_reopen_ignores_stale_root_animationend_and_allows_a_later_anim
     );
 
     present.set(false);
-    render_tick().await;
+    assert!(host.first_element_child().is_some());
+    TimeoutFuture::new(40).await;
     assert_eq!(attr(&root, "data-state").as_deref(), Some("closed"));
     dispatch_animation_end(&root, true);
-    render_tick().await;
+    TimeoutFuture::new(40).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -4581,14 +4731,21 @@ async fn presence_without_exit_motion_unmounts_immediately_and_runs_exit_complet
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
+        .set_property("transition-property", "opacity")
+        .expect("set transition property");
+    root.style()
         .set_property("transition-duration", "0s")
         .expect("set transition duration");
+    root.style()
+        .set_property("animation-name", "fade")
+        .expect("set animation name");
     root.style()
         .set_property("animation-duration", "0s")
         .expect("set animation duration");
 
     present.set(false);
-    render_tick().await;
+    assert!(host.first_element_child().is_some());
+    TimeoutFuture::new(40).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(
@@ -4638,17 +4795,14 @@ async fn presence_timeout_fallback_waits_for_the_longest_computed_exit_path() {
         .dyn_into::<web_sys::HtmlElement>()
         .expect("presence root html element");
     root.style()
-        .set_property("transition-duration", "30ms")
+        .set_property("transition-property", "opacity, transform")
+        .expect("set transition property");
+    root.style()
+        .set_property("transition-duration", "30ms, 20ms")
         .expect("set transition duration");
     root.style()
-        .set_property("transition-delay", "10ms")
+        .set_property("transition-delay", "10ms, 90ms")
         .expect("set transition delay");
-    root.style()
-        .set_property("animation-duration", "20ms")
-        .expect("set animation duration");
-    root.style()
-        .set_property("animation-delay", "90ms")
-        .expect("set animation delay");
 
     present.set(false);
     render_tick().await;
@@ -4671,7 +4825,7 @@ async fn presence_timeout_fallback_waits_for_the_longest_computed_exit_path() {
             .is_empty()
     );
 
-    TimeoutFuture::new(80).await;
+    TimeoutFuture::new(120).await;
 
     assert!(host.first_element_child().is_none());
     assert_eq!(

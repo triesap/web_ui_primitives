@@ -189,46 +189,42 @@ where
     } = options;
     let active = active.unwrap_or_else(|| Signal::derive(|| true));
 
-    if trapped {
-        if let Some(document) = document.clone() {
-            let trap_node_ref = node_ref;
-            let document_focus = document.clone();
-            let handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-                if event.key() != "Tab" {
-                    return;
-                }
-                if !focus_event_target_is_inside(event.target(), trap_node_ref) {
-                    return;
-                }
-                let Some(root) = trap_node_ref
-                    .get_untracked()
-                    .and_then(|root| root.dyn_into::<web_sys::Element>().ok())
-                else {
-                    return;
-                };
-                if !focus_event_target_is_owned_by_scope(event.target(), &root) {
-                    return;
-                }
-                event.prevent_default();
-                let _ = focus_scope_cycle(&root, &document_focus, event.shift_key());
-            }) as Box<dyn FnMut(_)>);
+    if trapped && let Some(document) = document.clone() {
+        let trap_node_ref = node_ref;
+        let document_focus = document.clone();
+        let handler = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+            if event.key() != "Tab" {
+                return;
+            }
+            if !focus_event_target_is_inside(event.target(), trap_node_ref) {
+                return;
+            }
+            let Some(root) = trap_node_ref
+                .get_untracked()
+                .and_then(|root| root.dyn_into::<web_sys::Element>().ok())
+            else {
+                return;
+            };
+            if !focus_event_target_is_owned_by_scope(event.target(), &root) {
+                return;
+            }
+            event.prevent_default();
+            let _ = focus_scope_cycle(&root, &document_focus, event.shift_key());
+        }) as Box<dyn FnMut(_)>);
+        let _ =
+            document.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+        let cleanup_document = SendWrapper::new(document);
+        let cleanup_handler = SendWrapper::new(handler);
+        on_cleanup(move || {
+            let document = cleanup_document.take();
+            let handler = cleanup_handler.take();
             let _ = document
-                .add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-            let cleanup_document = SendWrapper::new(document);
-            let cleanup_handler = SendWrapper::new(handler);
-            on_cleanup(move || {
-                let document = cleanup_document.take();
-                let handler = cleanup_handler.take();
-                let _ = document.remove_event_listener_with_callback(
-                    "keydown",
-                    handler.as_ref().unchecked_ref(),
-                );
-            });
-        }
+                .remove_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+        });
     }
 
     let effect_previous_focus = Arc::clone(&previous_focus);
-    let effect_on_unmount_auto_focus = on_unmount_auto_focus.clone();
+    let effect_on_unmount_auto_focus = on_unmount_auto_focus;
     let effect = RenderEffect::new(move |_| {
         if !active.get() {
             if focused.get_untracked() {
@@ -380,8 +376,8 @@ fn focus_scope_cycle(
     let active = document.active_element();
     let mut current_index = None;
     if let Some(active) = active {
-        for index in 0..count {
-            if active.is_same_node(Some(&elements[index])) {
+        for (index, element) in elements.iter().enumerate() {
+            if active.is_same_node(Some(element)) {
                 current_index = Some(index);
                 break;
             }
