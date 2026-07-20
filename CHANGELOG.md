@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog and this project adheres to
 Semantic Versioning.
 
+## [Unreleased]
+
+- Define render-neutral CSR, hydration, and SSR compatibility.
+- Require request-isolated native effects and hydration-safe portal identity.
+- Add a strict-CSP placement contract without removing the CSR adapter.
+
 ## [0.2.0] - 2026-07-18
 
 - Added Presence ABI v2 with keyed transition and animation lifecycle tracking.

@@ -36,6 +36,20 @@ The Leptos adapter exposes Presence ABI v2. Exit lifecycles account for all
 root transition and animation tracks, cancel events, zero/reduced motion,
 reopen races, and computed-style changes while an exit is in flight.
 
+## Leptos render modes
+
+The Leptos adapter is render-mode neutral. Final applications select CSR,
+hydration, or SSR; the adapter must not force a delivery mode into a shared
+dependency graph.
+
+Browser effects remain browser-owned. Native SSR rendering must not create
+process-global modal, scroll-lock, focus, dismissal, portal, or placement
+state shared between requests. Portal markup, generated IDs, and placement
+bindings used during SSR must hydrate without duplication or DOM identity
+drift. A strict placement adapter supports CSP deployments that prohibit
+inline style attributes while the existing element-style adapter remains
+available to qualified CSR consumers.
+
 ## Testing
 
 Browser-only Leptos behavior is covered in
