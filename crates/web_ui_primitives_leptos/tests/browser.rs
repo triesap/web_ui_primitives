@@ -5,6 +5,8 @@ use leptos::html;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use std::cell::Cell;
+#[cfg(feature = "hydrate")]
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
@@ -19,6 +21,98 @@ use web_ui_primitives_leptos::{
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
+
+#[cfg(feature = "hydrate")]
+struct ConsoleCapture {
+    console: wasm_bindgen::JsValue,
+    original_error: wasm_bindgen::JsValue,
+    original_warn: wasm_bindgen::JsValue,
+    _error_callback: Closure<dyn FnMut(wasm_bindgen::JsValue)>,
+    _warn_callback: Closure<dyn FnMut(wasm_bindgen::JsValue)>,
+    messages: Rc<RefCell<Vec<String>>>,
+    restored: bool,
+}
+
+#[cfg(feature = "hydrate")]
+impl ConsoleCapture {
+    fn install() -> Self {
+        let console = js_sys::Reflect::get(
+            &wasm_bindgen::JsValue::from(window()),
+            &wasm_bindgen::JsValue::from_str("console"),
+        )
+        .expect("browser console");
+        let original_error =
+            js_sys::Reflect::get(&console, &wasm_bindgen::JsValue::from_str("error"))
+                .expect("console.error");
+        let original_warn =
+            js_sys::Reflect::get(&console, &wasm_bindgen::JsValue::from_str("warn"))
+                .expect("console.warn");
+        let messages = Rc::new(RefCell::new(Vec::new()));
+        let error_messages = Rc::clone(&messages);
+        let error_callback = Closure::wrap(Box::new(move |value: wasm_bindgen::JsValue| {
+            error_messages
+                .borrow_mut()
+                .push(format!("error: {value:?}"));
+        }) as Box<dyn FnMut(_)>);
+        let warn_messages = Rc::clone(&messages);
+        let warn_callback = Closure::wrap(Box::new(move |value: wasm_bindgen::JsValue| {
+            warn_messages.borrow_mut().push(format!("warn: {value:?}"));
+        }) as Box<dyn FnMut(_)>);
+        js_sys::Reflect::set(
+            &console,
+            &wasm_bindgen::JsValue::from_str("error"),
+            error_callback.as_ref(),
+        )
+        .expect("capture console.error");
+        js_sys::Reflect::set(
+            &console,
+            &wasm_bindgen::JsValue::from_str("warn"),
+            warn_callback.as_ref(),
+        )
+        .expect("capture console.warn");
+
+        Self {
+            console,
+            original_error,
+            original_warn,
+            _error_callback: error_callback,
+            _warn_callback: warn_callback,
+            messages,
+            restored: false,
+        }
+    }
+
+    fn finish(mut self) -> Vec<String> {
+        self.restore();
+        core::mem::take(&mut self.messages.borrow_mut())
+    }
+
+    fn restore(&mut self) {
+        if self.restored {
+            return;
+        }
+        js_sys::Reflect::set(
+            &self.console,
+            &wasm_bindgen::JsValue::from_str("error"),
+            &self.original_error,
+        )
+        .expect("restore console.error");
+        js_sys::Reflect::set(
+            &self.console,
+            &wasm_bindgen::JsValue::from_str("warn"),
+            &self.original_warn,
+        )
+        .expect("restore console.warn");
+        self.restored = true;
+    }
+}
+
+#[cfg(feature = "hydrate")]
+impl Drop for ConsoleCapture {
+    fn drop(&mut self) {
+        self.restore();
+    }
+}
 
 fn document() -> web_sys::Document {
     window().document().expect("document")
@@ -3260,6 +3354,151 @@ async fn portal_mounts_children_into_the_explicit_target() {
     drop(mount);
     render_tick().await;
     assert_eq!(target.text_content().unwrap_or_default(), "");
+
+    remove_from_body(&host);
+    remove_from_body(&target);
+}
+
+#[wasm_bindgen_test]
+async fn portal_cleanup_removes_only_its_owned_explicit_target_subtree() {
+    let host = append_div("portal-owned-cleanup-host");
+    let target = append_div("portal-owned-cleanup-target");
+    let sentinel = append_child_div(&target, "portal-owned-cleanup-sentinel");
+    let target_mount: web_sys::Element = target.clone().into();
+
+    let mount = mount_to(host.clone(), move || {
+        let target_mount = target_mount.clone();
+        view! {
+            <Portal mount=target_mount>
+                <span id="portal-owned-cleanup-child">"Owned"</span>
+            </Portal>
+        }
+    });
+
+    assert!(target.contains(Some(&sentinel)));
+    assert_eq!(
+        target
+            .query_selector_all("[data-web-ui-portal]")
+            .expect("portal query")
+            .length(),
+        1
+    );
+
+    drop(mount);
+    render_tick().await;
+    assert!(target.contains(Some(&sentinel)));
+    assert_eq!(target.child_element_count(), 1);
+    assert_eq!(
+        target
+            .first_element_child()
+            .map(|child| child.id())
+            .as_deref(),
+        Some("portal-owned-cleanup-sentinel")
+    );
+
+    remove_from_body(&host);
+    remove_from_body(&target);
+}
+
+#[wasm_bindgen_test]
+async fn portal_can_retain_its_owned_container_inline() {
+    let host = append_div("portal-inline-host");
+    let body_children_before_mount = body().child_element_count();
+
+    let mount = mount_to(host.clone(), move || {
+        view! {
+            <Portal reparent=false>
+                <span id="portal-inline-child">"Inline"</span>
+            </Portal>
+        }
+    });
+
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+    assert_eq!(host.text_content().as_deref(), Some("Inline"));
+    assert_eq!(
+        host.query_selector_all("[data-web-ui-portal]")
+            .expect("portal query")
+            .length(),
+        1
+    );
+
+    drop(mount);
+    render_tick().await;
+    assert_eq!(host.text_content().unwrap_or_default(), "");
+    assert_eq!(body().child_element_count(), body_children_before_mount);
+
+    remove_from_body(&host);
+}
+
+#[cfg(feature = "hydrate")]
+#[wasm_bindgen_test]
+async fn portal_hydrates_once_then_reparents_the_existing_focused_subtree() {
+    let host = append_div("portal-hydration-host");
+    let target = append_div("portal-hydration-target");
+    host.set_inner_html(
+        "<div data-web-ui-portal=\"\"><button id=\"portal-hydrated-button\">Focused</button></div>\
+         <span id=\"portal-hydration-sibling\">After</span>",
+    );
+    let server_button = html_element_by_id("portal-hydrated-button");
+    let server_button_node: web_sys::Node = server_button.clone().into();
+    focus_element(&server_button);
+    let target_mount: web_sys::Element = target.clone().into();
+    let console = ConsoleCapture::install();
+
+    let mount = leptos::mount::hydrate_from(host.clone(), move || {
+        let target_mount = target_mount.clone();
+        view! {
+            <Portal mount=target_mount>
+                <button id="portal-hydrated-button">"Focused"</button>
+            </Portal>
+            <span id="portal-hydration-sibling">"After"</span>
+        }
+    });
+
+    assert_eq!(
+        document()
+            .query_selector_all("#portal-hydrated-button")
+            .expect("hydrated button query")
+            .length(),
+        1
+    );
+    assert_eq!(target.child_element_count(), 0);
+
+    render_tick().await;
+
+    let hydrated_button = html_element_by_id("portal-hydrated-button");
+    let hydrated_button_node: web_sys::Node = hydrated_button.clone().into();
+    assert!(server_button_node.is_same_node(Some(&hydrated_button_node)));
+    assert_eq!(active_id().as_deref(), Some("portal-hydrated-button"));
+    assert_eq!(
+        document()
+            .query_selector_all("#portal-hydrated-button")
+            .expect("hydrated button query")
+            .length(),
+        1
+    );
+    assert_eq!(
+        target
+            .query_selector_all("[data-web-ui-portal]")
+            .expect("portal query")
+            .length(),
+        1
+    );
+    assert_eq!(
+        host.query_selector_all("#portal-hydration-sibling")
+            .expect("sibling query")
+            .length(),
+        1
+    );
+    let console_messages = console.finish();
+    assert!(
+        console_messages.is_empty(),
+        "hydration emitted console diagnostics: {console_messages:?}"
+    );
+
+    drop(mount);
+    render_tick().await;
+    assert_eq!(target.child_element_count(), 0);
 
     remove_from_body(&host);
     remove_from_body(&target);

@@ -74,7 +74,7 @@ pub use menu::{
 pub use modal::{
     ModalError, ModalGuard, ModalResult, ModalTarget, modal_hide_siblings, modal_restore,
 };
-pub use portal::{Portal, PortalMount};
+pub use portal::{PORTAL_CONTAINER_ATTRIBUTE, Portal, PortalMount};
 pub use presence::use_presence_with_node_ref;
 pub use presence::{
     PRESENCE_ABI_VERSION, Presence, PresenceBinding, PresenceState, presence_state_next,

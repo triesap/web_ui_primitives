@@ -36,6 +36,11 @@ The Leptos adapter exposes Presence ABI v2. Exit lifecycles account for all
 root transition and animation tracks, cancel events, zero/reduced motion,
 reopen races, and computed-style changes while an exit is in flight.
 
+`Portal` renders one owned `data-web-ui-portal` container during SSR, CSR, and
+hydration. Hydration attaches to that existing subtree before the browser moves
+the same node to an explicit mount or `document.body`; `reparent=false` retains
+the inline container. Cleanup removes only the container owned by that portal.
+
 ## Leptos render modes
 
 The Leptos adapter is render-mode neutral. Final applications select CSR,
