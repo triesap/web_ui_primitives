@@ -67,9 +67,11 @@ pub use focus::{
     use_focus_scope, use_focus_scope_with_node_ref,
 };
 pub use menu::{
-    MenuLayerBinding, MenuLayerOptions, MenuPlacementBinding, MenuPlacementOptions,
-    placement_align_data_value, placement_side_data_value, use_menu_layer,
-    use_menu_layer_with_node_ref, use_menu_placement_with_node_refs,
+    MenuLayerBinding, MenuLayerOptions, MenuPlacementBinding, MenuPlacementOptions, PlacementSink,
+    PlacementSinkError, PlacementStyleId, PlacementStyleNonce, STRICT_PLACEMENT_ATTRIBUTE,
+    STRICT_PLACEMENT_STYLESHEET_ATTRIBUTE, StrictPlacementSink, placement_align_data_value,
+    placement_side_data_value, use_menu_layer, use_menu_layer_with_node_ref,
+    use_menu_placement_with_node_refs,
 };
 pub use modal::{
     ModalError, ModalGuard, ModalResult, ModalTarget, modal_hide_siblings, modal_restore,

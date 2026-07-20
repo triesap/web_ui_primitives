@@ -4,20 +4,22 @@ use gloo_timers::future::TimeoutFuture;
 use leptos::html;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
-use std::cell::Cell;
-#[cfg(feature = "hydrate")]
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen_test::*;
+use web_ui_primitives_core::{PlacementAlign, PlacementSide};
 use web_ui_primitives_leptos::{
     DialogLayerOptions, DismissibleEscapeKeyDownEvent, DismissibleFocusOutsideEvent,
     DismissibleLayer, DismissibleLayerOptions, DismissiblePointerDownOutsideEvent,
-    DismissibleReason, FocusScope, FocusScopeOptions, MenuLayerOptions, Portal, Presence,
+    DismissibleReason, FocusScope, FocusScopeOptions, MenuLayerOptions, MenuPlacementOptions,
+    PlacementSink, PlacementSinkError, PlacementStyleId, PlacementStyleNonce, Portal, Presence,
+    STRICT_PLACEMENT_ATTRIBUTE, STRICT_PLACEMENT_STYLESHEET_ATTRIBUTE, StrictPlacementSink,
     modal_hide_siblings, scroll_lock_acquire, scroll_lock_release, use_dialog_layer,
-    use_dismissible_layer, use_focus_scope, use_menu_layer, use_presence,
+    use_dismissible_layer, use_focus_scope, use_menu_layer, use_menu_placement_with_node_refs,
+    use_presence,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -157,6 +159,10 @@ fn focus_element(target: &web_sys::HtmlElement) {
 
 async fn render_tick() {
     TimeoutFuture::new(0).await;
+}
+
+async fn animation_tick() {
+    TimeoutFuture::new(32).await;
 }
 
 fn append_div(id: &str) -> web_sys::HtmlElement {
@@ -611,6 +617,228 @@ async fn menu_layer_composes_presence_focus_and_dismissible_behavior() {
     render_tick().await;
     remove_from_body(&host);
     remove_from_body(&outside);
+}
+
+#[wasm_bindgen_test]
+async fn strict_menu_placement_uses_only_an_owned_nonce_stylesheet() {
+    let host = append_div("strict-placement-host");
+    let open = RwSignal::new(true);
+    let observed = Rc::new(RefCell::new(None));
+    let observed_handle = Rc::clone(&observed);
+    let fixture_stylesheet = document()
+        .create_element("style")
+        .expect("fixture stylesheet");
+    fixture_stylesheet
+        .set_attribute("nonce", "strictNonce123")
+        .expect("fixture nonce");
+    fixture_stylesheet.set_text_content(Some(
+        "#strict-placement-trigger{position:fixed;left:120px;top:80px;width:70px;height:24px;}",
+    ));
+    document()
+        .query_selector("head")
+        .expect("head query")
+        .expect("head")
+        .append_child(&fixture_stylesheet)
+        .expect("append fixture stylesheet");
+
+    let mount = mount_to(host.clone(), move || {
+        let trigger_ref = NodeRef::<html::Button>::new();
+        let content_ref = NodeRef::<html::Div>::new();
+        let sink = StrictPlacementSink::new(
+            PlacementStyleId::new("strict-placement-menu").expect("placement ID"),
+        )
+        .authorized(PlacementStyleNonce::new("strictNonce123").expect("nonce"));
+        let placement = use_menu_placement_with_node_refs(
+            trigger_ref,
+            content_ref,
+            MenuPlacementOptions::new(
+                Signal::derive(move || open.get()),
+                PlacementSide::Bottom,
+                PlacementAlign::End,
+            )
+            .spacing(7.0)
+            .viewport_padding(11.0)
+            .sink(PlacementSink::StrictStylesheet(sink)),
+        );
+        *observed_handle.borrow_mut() = Some(placement.clone());
+
+        view! {
+            <button
+                id="strict-placement-trigger"
+                node_ref=trigger_ref
+            >
+                "Open"
+            </button>
+            <div id="strict-placement-content" node_ref=content_ref>"Content"</div>
+        }
+    });
+
+    animation_tick().await;
+
+    let content = html_element_by_id("strict-placement-content");
+    assert!(!content.has_attribute("style"));
+    assert_eq!(
+        content.get_attribute(STRICT_PLACEMENT_ATTRIBUTE).as_deref(),
+        Some("strict-placement-menu")
+    );
+    let stylesheet = document()
+        .query_selector(&format!(
+            "style[{STRICT_PLACEMENT_STYLESHEET_ATTRIBUTE}=\"strict-placement-menu\"]"
+        ))
+        .expect("stylesheet query")
+        .expect("strict placement stylesheet");
+    assert_eq!(
+        js_sys::Reflect::get(
+            stylesheet.as_ref(),
+            &wasm_bindgen::JsValue::from_str("nonce")
+        )
+        .expect("stylesheet nonce property")
+        .as_string()
+        .as_deref(),
+        Some("strictNonce123")
+    );
+    let first_rule = stylesheet.text_content().expect("placement rule");
+    assert!(first_rule.contains("position:fixed"));
+    assert!(first_rule.contains("left:"));
+    assert!(first_rule.contains("top:"));
+    assert!(!first_rule.contains("unsafe-inline"));
+    let placement = observed.borrow().clone().expect("placement binding");
+    assert_eq!(placement.style(), "");
+    assert_eq!(placement.error(), None);
+    assert_eq!(
+        placement.strict_id().map(PlacementStyleId::as_str),
+        Some("strict-placement-menu")
+    );
+
+    fixture_stylesheet.set_text_content(Some(
+        "#strict-placement-trigger{position:fixed;left:260px;top:80px;width:70px;height:24px;}",
+    ));
+    window()
+        .dispatch_event(&web_sys::Event::new("resize").expect("resize event"))
+        .expect("dispatch resize");
+    animation_tick().await;
+    let second_rule = stylesheet.text_content().expect("updated placement rule");
+    assert_ne!(first_rule, second_rule);
+
+    drop(mount);
+    render_tick().await;
+    assert!(
+        document()
+            .query_selector(&format!(
+                "style[{STRICT_PLACEMENT_STYLESHEET_ATTRIBUTE}=\"strict-placement-menu\"]"
+            ))
+            .expect("stylesheet query")
+            .is_none()
+    );
+    if let Some(parent) = fixture_stylesheet.parent_node() {
+        parent
+            .remove_child(&fixture_stylesheet)
+            .expect("remove fixture stylesheet");
+    }
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn strict_menu_placement_without_authorization_fails_closed() {
+    let host = append_div("strict-placement-unauthorized-host");
+    let observed = Rc::new(RefCell::new(None));
+    let observed_handle = Rc::clone(&observed);
+
+    let mount = mount_to(host.clone(), move || {
+        let trigger_ref = NodeRef::<html::Button>::new();
+        let content_ref = NodeRef::<html::Div>::new();
+        let placement = use_menu_placement_with_node_refs(
+            trigger_ref,
+            content_ref,
+            MenuPlacementOptions::new(
+                Signal::derive(|| true),
+                PlacementSide::Bottom,
+                PlacementAlign::Start,
+            )
+            .sink(PlacementSink::StrictStylesheet(StrictPlacementSink::new(
+                PlacementStyleId::new("strict-placement-unauthorized").expect("placement ID"),
+            ))),
+        );
+        *observed_handle.borrow_mut() = Some(placement.clone());
+
+        view! {
+            <button id="strict-placement-unauthorized-trigger" node_ref=trigger_ref>"Open"</button>
+            <div id="strict-placement-unauthorized-content" node_ref=content_ref>"Content"</div>
+        }
+    });
+
+    animation_tick().await;
+
+    let content = html_element_by_id("strict-placement-unauthorized-content");
+    assert!(!content.has_attribute("style"));
+    assert!(!content.has_attribute(STRICT_PLACEMENT_ATTRIBUTE));
+    assert!(
+        document()
+            .query_selector(&format!(
+                "style[{STRICT_PLACEMENT_STYLESHEET_ATTRIBUTE}=\"strict-placement-unauthorized\"]"
+            ))
+            .expect("stylesheet query")
+            .is_none()
+    );
+    let placement = observed.borrow().clone().expect("placement binding");
+    assert_eq!(placement.style(), "");
+    assert_eq!(
+        placement.error(),
+        Some(PlacementSinkError::MissingAuthorization)
+    );
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
+}
+
+#[wasm_bindgen_test]
+async fn legacy_menu_placement_retains_inline_style_behavior() {
+    let host = append_div("legacy-placement-host");
+
+    let mount = mount_to(host.clone(), move || {
+        let trigger_ref = NodeRef::<html::Button>::new();
+        let content_ref = NodeRef::<html::Div>::new();
+        let placement = use_menu_placement_with_node_refs(
+            trigger_ref,
+            content_ref,
+            MenuPlacementOptions::new(
+                Signal::derive(|| true),
+                PlacementSide::Bottom,
+                PlacementAlign::Start,
+            ),
+        );
+        let placement_style = placement.clone();
+
+        view! {
+            <button
+                id="legacy-placement-trigger"
+                node_ref=trigger_ref
+                style="position:fixed;left:40px;top:40px;width:60px;height:20px;"
+            >
+                "Open"
+            </button>
+            <div
+                id="legacy-placement-content"
+                node_ref=content_ref
+                style=move || placement_style.style()
+            >
+                "Content"
+            </div>
+        }
+    });
+
+    animation_tick().await;
+
+    let content = html_element_by_id("legacy-placement-content");
+    let style = content.get_attribute("style").expect("legacy style");
+    assert!(style.contains("left:"));
+    assert!(style.contains("top:"));
+    assert!(!content.has_attribute(STRICT_PLACEMENT_ATTRIBUTE));
+
+    drop(mount);
+    render_tick().await;
+    remove_from_body(&host);
 }
 
 #[wasm_bindgen_test]

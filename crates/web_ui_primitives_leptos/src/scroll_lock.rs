@@ -215,9 +215,8 @@ mod tests {
         std::thread::scope(|scope| {
             for _ in 0..16 {
                 scope.spawn(|| {
-                    let guard = scroll_lock_acquire().expect("lock");
+                    let _guard = scroll_lock_acquire().expect("lock");
                     scroll_lock_release().expect("release");
-                    drop(guard);
                 });
             }
         });

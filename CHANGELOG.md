@@ -10,6 +10,8 @@ Semantic Versioning.
 - Remove the forced CSR feature and add explicit CSR, hydrate, and SSR forwarding.
 - Render portals through one hydration-safe owned container with optional
   post-hydration reparenting.
+- Add a typed nonce-authorized placement stylesheet adapter while retaining
+  the legacy CSR inline-style adapter.
 - Define render-neutral CSR, hydration, and SSR compatibility.
 - Require request-isolated native effects and hydration-safe portal identity.
 - Add a strict-CSP placement contract without removing the CSR adapter.

@@ -261,9 +261,8 @@ mod tests {
         std::thread::scope(|scope| {
             for _ in 0..16 {
                 scope.spawn(|| {
-                    let guard = modal_hide_siblings(&()).expect("guard");
+                    let _guard = modal_hide_siblings(&()).expect("guard");
                     modal_restore(u64::MAX).expect("restore");
-                    drop(guard);
                 });
             }
         });

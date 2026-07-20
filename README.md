@@ -41,6 +41,11 @@ hydration. Hydration attaches to that existing subtree before the browser moves
 the same node to an explicit mount or `document.body`; `reparent=false` retains
 the inline container. Cleanup removes only the container owned by that portal.
 
+Dynamic menu placement supports both the existing inline-style adapter and a
+typed strict adapter. The strict adapter accepts only a validated stable
+component ID and CSP nonce, publishes finite placement values through an owned
+document stylesheet, and fails closed when authorization is absent.
+
 ## Leptos render modes
 
 The Leptos adapter is render-mode neutral. Final applications select CSR,
