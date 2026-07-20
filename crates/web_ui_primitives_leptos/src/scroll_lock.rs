@@ -1,3 +1,4 @@
+#[cfg(target_arch = "wasm32")]
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_arch = "wasm32")]
@@ -18,11 +19,18 @@ pub type ScrollLockResult<T> = Result<T, ScrollLockError>;
 /// RAII guard returned by [`scroll_lock_acquire`].
 ///
 /// Dropping the guard releases one scroll lock reference.
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct ScrollLockGuard {
     active: bool,
 }
 
+/// Stateless native guard returned when no browser document exists.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct ScrollLockGuard;
+
+#[cfg(target_arch = "wasm32")]
 impl Drop for ScrollLockGuard {
     fn drop(&mut self) {
         if self.active {
@@ -32,7 +40,7 @@ impl Drop for ScrollLockGuard {
     }
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug, Default, Clone)]
 struct ScrollLockSnapshot {
     scroll_y: f64,
@@ -42,14 +50,17 @@ struct ScrollLockSnapshot {
     width: String,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug, Default)]
 struct ScrollLockState {
     count: usize,
     snapshot: Option<ScrollLockSnapshot>,
 }
 
+#[cfg(target_arch = "wasm32")]
 static SCROLL_LOCK_STATE: OnceLock<Mutex<ScrollLockState>> = OnceLock::new();
 
+#[cfg(target_arch = "wasm32")]
 fn scroll_lock_state() -> &'static Mutex<ScrollLockState> {
     SCROLL_LOCK_STATE.get_or_init(|| Mutex::new(ScrollLockState::default()))
 }
@@ -57,8 +68,8 @@ fn scroll_lock_state() -> &'static Mutex<ScrollLockState> {
 /// Acquires a global scroll lock.
 ///
 /// On wasm this snapshots body styles and fixes the body in place until all
-/// acquired guards have been released. On non-wasm targets it only updates the
-/// internal reference count so tests and host builds remain well-defined.
+/// acquired guards have been released.
+#[cfg(target_arch = "wasm32")]
 pub fn scroll_lock_acquire() -> ScrollLockResult<ScrollLockGuard> {
     let mut state = scroll_lock_state()
         .lock()
@@ -70,10 +81,19 @@ pub fn scroll_lock_acquire() -> ScrollLockResult<ScrollLockGuard> {
     Ok(ScrollLockGuard { active: true })
 }
 
+/// Returns a stateless no-op guard on native targets.
+///
+/// Native SSR never creates process-global scroll-lock state.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn scroll_lock_acquire() -> ScrollLockResult<ScrollLockGuard> {
+    Ok(ScrollLockGuard)
+}
+
 /// Releases one global scroll lock reference.
 ///
 /// Extra releases are ignored. When the final reference is released on wasm,
 /// the original body styles and scroll position are restored.
+#[cfg(target_arch = "wasm32")]
 pub fn scroll_lock_release() -> ScrollLockResult<()> {
     let mut state = scroll_lock_state()
         .lock()
@@ -85,6 +105,12 @@ pub fn scroll_lock_release() -> ScrollLockResult<()> {
     if state.count == 0 {
         scroll_lock_restore(&mut state)?;
     }
+    Ok(())
+}
+
+/// Performs no work on native targets because no browser lock exists.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn scroll_lock_release() -> ScrollLockResult<()> {
     Ok(())
 }
 
@@ -114,12 +140,6 @@ fn scroll_lock_apply(state: &mut ScrollLockState) -> ScrollLockResult<()> {
     Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn scroll_lock_apply(state: &mut ScrollLockState) -> ScrollLockResult<()> {
-    state.snapshot = None;
-    Ok(())
-}
-
 #[cfg(target_arch = "wasm32")]
 fn scroll_lock_restore(state: &mut ScrollLockState) -> ScrollLockResult<()> {
     let Some(snapshot) = state.snapshot.take() else {
@@ -139,12 +159,6 @@ fn scroll_lock_restore(state: &mut ScrollLockState) -> ScrollLockResult<()> {
     Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn scroll_lock_restore(state: &mut ScrollLockState) -> ScrollLockResult<()> {
-    state.snapshot = None;
-    Ok(())
-}
-
 #[cfg(target_arch = "wasm32")]
 fn style_set(style: &CssStyleDeclaration, name: &str, value: &str) -> ScrollLockResult<()> {
     style
@@ -159,7 +173,7 @@ fn style_value(style: &CssStyleDeclaration, name: &str) -> ScrollLockResult<Stri
         .map_err(|_| ScrollLockError::StyleUnavailable)
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "wasm32"))]
 fn scroll_lock_count_for_test() -> usize {
     let state = scroll_lock_state()
         .lock()
@@ -169,10 +183,13 @@ fn scroll_lock_count_for_test() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{scroll_lock_acquire, scroll_lock_count_for_test, scroll_lock_release};
+    use super::{scroll_lock_acquire, scroll_lock_release};
 
+    #[cfg(target_arch = "wasm32")]
     #[test]
     fn scroll_lock_guard_updates_count() {
+        use super::scroll_lock_count_for_test;
+
         assert_eq!(scroll_lock_count_for_test(), 0);
         let guard = scroll_lock_acquire().expect("lock");
         assert_eq!(scroll_lock_count_for_test(), 1);
@@ -180,9 +197,29 @@ mod tests {
         assert_eq!(scroll_lock_count_for_test(), 0);
     }
 
+    #[cfg(target_arch = "wasm32")]
     #[test]
     fn scroll_lock_release_is_idempotent() {
+        use super::scroll_lock_count_for_test;
+
         scroll_lock_release().expect("release");
         assert_eq!(scroll_lock_count_for_test(), 0);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_scroll_lock_guards_are_stateless_across_requests() {
+        use super::ScrollLockGuard;
+
+        assert_eq!(core::mem::size_of::<ScrollLockGuard>(), 0);
+        std::thread::scope(|scope| {
+            for _ in 0..16 {
+                scope.spawn(|| {
+                    let guard = scroll_lock_acquire().expect("lock");
+                    scroll_lock_release().expect("release");
+                    drop(guard);
+                });
+            }
+        });
     }
 }

@@ -27,6 +27,15 @@
 //!
 #![forbid(unsafe_code)]
 
+#[cfg(any(
+    all(feature = "csr", feature = "hydrate"),
+    all(feature = "csr", feature = "ssr"),
+    all(feature = "hydrate", feature = "ssr")
+))]
+compile_error!(
+    "`csr`, `hydrate`, and `ssr` are mutually exclusive web_ui_primitives_leptos render modes"
+);
+
 pub mod attrs;
 mod dialog;
 mod dismissible;

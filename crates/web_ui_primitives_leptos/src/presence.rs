@@ -1411,4 +1411,29 @@ mod tests {
         ]);
         assert_ne!(left, right);
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_presence_state_is_isolated_by_request_owner() {
+        use leptos::html;
+        use leptos::prelude::{Owner, RwSignal};
+
+        std::thread::scope(|scope| {
+            let requests = (0..16)
+                .map(|index| {
+                    scope.spawn(move || {
+                        Owner::new().with(|| {
+                            let present = RwSignal::new(index % 2 == 0);
+                            let binding = super::use_presence::<html::Div>(present, None);
+                            assert_eq!(binding.is_rendered(), index % 2 == 0);
+                        });
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            for request in requests {
+                request.join().expect("request owner");
+            }
+        });
+    }
 }

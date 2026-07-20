@@ -14,17 +14,21 @@ categories = ["gui", "accessibility"]
 
 [features]
 default = ["core"]
-core = ["web_ui_primitives_core"]
-leptos = ["web_ui_primitives_leptos"]
+core = ["dep:web_ui_primitives_core"]
+leptos = ["dep:web_ui_primitives_leptos"]
+csr = ["leptos", "web_ui_primitives_leptos/csr"]
+hydrate = ["leptos", "web_ui_primitives_leptos/hydrate"]
+ssr = ["leptos", "web_ui_primitives_leptos/ssr"]
 
 [dependencies]
 web_ui_primitives_core = { path = "../web_ui_primitives_core", version = "0.2.0", optional = true }
 web_ui_primitives_leptos = { path = "../web_ui_primitives_leptos", version = "0.2.0", optional = true }
 
 [package.metadata.docs.rs]
-all-features = true
 default-target = "wasm32-unknown-unknown"
 targets = ["x86_64-unknown-linux-gnu"]
+no-default-features = true
+features = ["core", "ssr"]
 
 [lints]
 workspace = true

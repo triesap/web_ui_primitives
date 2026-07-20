@@ -14,8 +14,7 @@ Use the umbrella crate when you want one dependency with feature-gated adapters:
 
 ```toml
 [dependencies]
-web_ui_primitives = { version = "0.2.0", features = ["leptos"] }
-leptos = { version = "0.9.0-alpha", features = ["csr"] }
+web_ui_primitives = { version = "0.2.0", features = ["csr"] }
 ```
 
 Use the adapter crate directly when you want explicit control over the dependency graph:
@@ -23,14 +22,15 @@ Use the adapter crate directly when you want explicit control over the dependenc
 ```toml
 [dependencies]
 web_ui_primitives_core = "0.2.0"
-web_ui_primitives_leptos = "0.2.0"
-leptos = { version = "0.9.0-alpha", features = ["csr"] }
+web_ui_primitives_leptos = { version = "0.2.0", features = ["csr"] }
 ```
 
 ## Features
 
 - `core` (default): core interaction models and low-level interaction utilities
 - `leptos`: Leptos bindings (depends on `web_ui_primitives_core`)
+- `csr`, `hydrate`, `ssr`: mutually exclusive final-consumer render modes that
+  enable and forward the Leptos adapter mode
 
 The Leptos adapter exposes Presence ABI v2. Exit lifecycles account for all
 root transition and animation tracks, cancel events, zero/reduced motion,

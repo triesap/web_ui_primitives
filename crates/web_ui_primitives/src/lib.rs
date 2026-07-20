@@ -4,13 +4,15 @@
 //!
 //! - `core` (default): re-exports [`web_ui_primitives_core`] as [`core`].
 //! - `leptos`: re-exports [`web_ui_primitives_leptos`] as [`leptos`].
+//! - `csr`, `hydrate`, and `ssr`: select one final-consumer Leptos render mode
+//!   and enable the `leptos` adapter.
 //!
 //! Enable the `leptos` feature when you want to consume the Leptos bindings from
 //! this crate:
 //!
 //! ```toml
 //! [dependencies]
-//! web_ui_primitives = { version = "0.1.0", features = ["leptos"] }
+//! web_ui_primitives = { version = "0.2.0", features = ["csr"] }
 //! ```
 //!
 //! Applications can also depend on `web_ui_primitives_core` and

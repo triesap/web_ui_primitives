@@ -3,9 +3,6 @@
 #[cfg(target_arch = "wasm32")]
 use std::cell::RefCell;
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::{Mutex, OnceLock};
-
 #[cfg(target_arch = "wasm32")]
 use web_sys::{Element, window};
 
@@ -17,16 +14,14 @@ struct HiddenElement {
     prev_inert: bool,
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[derive(Debug, Clone)]
-struct HiddenElement;
-
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug, Clone)]
 struct ModalLayer {
     id: u64,
     hidden: Vec<HiddenElement>,
 }
 
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug, Default)]
 struct ModalState {
     next_id: u64,
@@ -63,12 +58,19 @@ pub type ModalTarget = ();
 ///
 /// Dropping the guard restores any siblings hidden for that modal layer unless
 /// another active layer still requires them to stay hidden.
+#[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct ModalGuard {
     id: u64,
     active: bool,
 }
 
+/// No-op native guard returned when no browser DOM exists.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct ModalGuard;
+
+#[cfg(target_arch = "wasm32")]
 impl Drop for ModalGuard {
     fn drop(&mut self) {
         if self.active {
@@ -83,21 +85,9 @@ thread_local! {
     static MODAL_STATE: RefCell<ModalState> = RefCell::new(ModalState::default());
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-static MODAL_STATE: OnceLock<Mutex<ModalState>> = OnceLock::new();
-
 #[cfg(target_arch = "wasm32")]
 fn modal_state_with<T>(f: impl FnOnce(&mut ModalState) -> T) -> T {
     MODAL_STATE.with(|state| f(&mut state.borrow_mut()))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn modal_state_with<T>(f: impl FnOnce(&mut ModalState) -> T) -> T {
-    let mut state = MODAL_STATE
-        .get_or_init(|| Mutex::new(ModalState::default()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    f(&mut state)
 }
 
 /// Hides siblings outside the modal branch and returns a restoration guard.
@@ -105,8 +95,9 @@ fn modal_state_with<T>(f: impl FnOnce(&mut ModalState) -> T) -> T {
 /// On wasm, this walks ancestor levels from `root` up to `body`, applying
 /// `aria-hidden` and `inert` to siblings outside the active branch.
 ///
-/// On non-wasm targets, this records a logical modal layer without mutating a
-/// DOM tree so tests and host builds remain deterministic.
+/// On non-wasm targets, this returns a stateless no-op guard. Native SSR never
+/// creates process-global modal state.
+#[cfg(target_arch = "wasm32")]
 pub fn modal_hide_siblings(root: &ModalTarget) -> ModalResult<ModalGuard> {
     let id = modal_state_with(|state| {
         let id = state.next_id;
@@ -118,10 +109,16 @@ pub fn modal_hide_siblings(root: &ModalTarget) -> ModalResult<ModalGuard> {
     Ok(ModalGuard { id, active: true })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn modal_hide_siblings(_root: &ModalTarget) -> ModalResult<ModalGuard> {
+    Ok(ModalGuard)
+}
+
 /// Restores the hidden siblings for a modal layer id.
 ///
 /// If the id is unknown, this is a no-op. On wasm, siblings are only restored
 /// when no remaining modal layer still hides them.
+#[cfg(target_arch = "wasm32")]
 pub fn modal_restore(id: u64) -> ModalResult<()> {
     modal_state_with(|state| {
         let index = state.layers.iter().position(|layer| layer.id == id);
@@ -132,6 +129,11 @@ pub fn modal_restore(id: u64) -> ModalResult<()> {
         modal_restore_hidden(&state.layers, removed.hidden)?;
         Ok(())
     })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn modal_restore(_id: u64) -> ModalResult<()> {
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -162,11 +164,6 @@ fn modal_collect_hidden(root: &Element) -> ModalResult<Vec<HiddenElement>> {
         current = parent;
     }
     Ok(hidden)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn modal_collect_hidden(_root: &ModalTarget) -> ModalResult<Vec<HiddenElement>> {
-    Ok(Vec::new())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -241,11 +238,6 @@ fn modal_restore_hidden(layers: &[ModalLayer], hidden: Vec<HiddenElement>) -> Mo
     Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn modal_restore_hidden(_layers: &[ModalLayer], _hidden: Vec<HiddenElement>) -> ModalResult<()> {
-    Ok(())
-}
-
 #[cfg(target_arch = "wasm32")]
 fn modal_is_hidden_by_layers(layers: &[ModalLayer], element: &Element) -> bool {
     layers.iter().any(|layer| {
@@ -256,31 +248,25 @@ fn modal_is_hidden_by_layers(layers: &[ModalLayer], element: &Element) -> bool {
     })
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-#[cfg(not(target_arch = "wasm32"))]
-fn modal_is_hidden_by_layers(_layers: &[ModalLayer], _element: &ModalTarget) -> bool {
-    false
-}
-
-#[cfg(all(test, not(target_arch = "wasm32")))]
-fn modal_layer_count_for_test() -> usize {
-    modal_state_with(|state| state.layers.len())
-}
-
 #[cfg(test)]
 mod tests {
     use super::modal_hidden_sibling_indexes;
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn modal_guard_tracks_layers() {
-        use super::{modal_hide_siblings, modal_layer_count_for_test};
+    fn native_modal_guards_are_stateless_across_requests() {
+        use super::{ModalGuard, modal_hide_siblings, modal_restore};
 
-        assert_eq!(modal_layer_count_for_test(), 0);
-        let guard = modal_hide_siblings(&()).expect("guard");
-        assert_eq!(modal_layer_count_for_test(), 1);
-        drop(guard);
-        assert_eq!(modal_layer_count_for_test(), 0);
+        assert_eq!(core::mem::size_of::<ModalGuard>(), 0);
+        std::thread::scope(|scope| {
+            for _ in 0..16 {
+                scope.spawn(|| {
+                    let guard = modal_hide_siblings(&()).expect("guard");
+                    modal_restore(u64::MAX).expect("restore");
+                    drop(guard);
+                });
+            }
+        });
     }
 
     #[test]
