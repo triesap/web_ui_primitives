@@ -7,6 +7,7 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+- Raise the development toolchain and minimum supported Rust version to 1.99.0.
 - Remove the forced CSR feature and add explicit CSR, hydrate, and SSR forwarding.
 - Render portals through one hydration-safe owned container with optional
   post-hydration reparenting.

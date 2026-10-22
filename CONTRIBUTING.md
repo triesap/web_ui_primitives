@@ -11,6 +11,8 @@ Thanks for your interest in contributing to web_ui_primitives.
 
 ## Development setup
 
+Use Rust 1.99.0, the pinned development toolchain and minimum supported version.
+
 This repository is a Rust workspace. Typical tasks:
 
 - `cargo fmt`
